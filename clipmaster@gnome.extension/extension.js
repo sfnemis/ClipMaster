@@ -28,6 +28,7 @@ import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import Pango from 'gi://Pango';
+import GdkPixbuf from 'gi://GdkPixbuf';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -1988,15 +1989,108 @@ class ClipboardPopup extends St.BoxLayout {
             try {
                 const file = Gio.File.new_for_path(item.content);
                 if (file.query_exists(null)) {
-                    // Use file icon as thumbnail (shows image preview)
-                    const gicon = new Gio.FileIcon({ file: file });
-                    const thumbnail = new St.Icon({
-                        gicon: gicon,
-                        icon_size: 32,
-                        style_class: 'clipmaster-item-thumbnail'
-                    });
-                    row.add_child(thumbnail);
-                    debugLog(`Image thumbnail added for: ${item.content}`);
+                    // Load image and create thumbnail
+                    try {
+                        // Use new_from_file for better compatibility (works on GNOME 42-49)
+                        const pixbuf = GdkPixbuf.Pixbuf.new_from_file(item.content);
+                        
+                        if (pixbuf) {
+                            // Scale to thumbnail size (32x32 max, maintain aspect ratio)
+                            const maxSize = 32;
+                            let width = pixbuf.get_width();
+                            let height = pixbuf.get_height();
+                            let scaledPixbuf = pixbuf;
+                            
+                            if (width > maxSize || height > maxSize) {
+                                const scale = Math.min(maxSize / width, maxSize / height);
+                                const newWidth = Math.floor(width * scale);
+                                const newHeight = Math.floor(height * scale);
+                                scaledPixbuf = pixbuf.scale_simple(
+                                    newWidth,
+                                    newHeight,
+                                    GdkPixbuf.InterpType.BILINEAR
+                                );
+                            }
+                            
+                            // Create texture from pixbuf - try multiple methods for compatibility
+                            let texture = null;
+                            
+                            // Method 1: Try St.TextureCache (GNOME 45+)
+                            try {
+                                const textureCache = St.TextureCache.get_default();
+                                if (textureCache && textureCache.load_pixbuf) {
+                                    texture = textureCache.load_pixbuf(scaledPixbuf);
+                                }
+                            } catch (e) {
+                                debugLog(`TextureCache method failed: ${e.message}`);
+                            }
+                            
+                            // Method 2: Try Clutter.Image (fallback for older GNOME)
+                            if (!texture) {
+                                try {
+                                    const clutterImage = new Clutter.Image();
+                                    const pixels = scaledPixbuf.get_pixels();
+                                    clutterImage.set_data(
+                                        pixels,
+                                        scaledPixbuf.get_colorspace(),
+                                        scaledPixbuf.get_width(),
+                                        scaledPixbuf.get_height(),
+                                        scaledPixbuf.get_rowstride(),
+                                        scaledPixbuf.get_bits_per_sample(),
+                                        scaledPixbuf.get_n_channels()
+                                    );
+                                    texture = clutterImage;
+                                } catch (e) {
+                                    debugLog(`Clutter.Image method failed: ${e.message}`);
+                                }
+                            }
+                            
+                            if (texture) {
+                                const thumbnail = new St.Bin({
+                                    width: maxSize,
+                                    height: maxSize,
+                                    style_class: 'clipmaster-item-thumbnail',
+                                    child: texture
+                                });
+                                row.add_child(thumbnail);
+                                debugLog(`Image thumbnail added for: ${item.content}`);
+                            } else {
+                                throw new Error('Failed to create texture from pixbuf');
+                            }
+                        } else {
+                            throw new Error('Failed to load pixbuf from file');
+                        }
+                    } catch (pixbufError) {
+                        debugLog(`Pixbuf error: ${pixbufError.message}`);
+                        // Fallback to file icon
+                        try {
+                            const gicon = new Gio.FileIcon({ file: file });
+                            const thumbnail = new St.Icon({
+                                gicon: gicon,
+                                icon_size: 32,
+                                style_class: 'clipmaster-item-thumbnail'
+                            });
+                            row.add_child(thumbnail);
+                        } catch (iconError) {
+                            debugLog(`Icon error: ${iconError.message}`);
+                            // Final fallback to generic icon
+                            const icon = new St.Icon({
+                                icon_name: 'image-x-generic-symbolic',
+                                icon_size: 16,
+                                style_class: 'clipmaster-item-icon'
+                            });
+                            row.add_child(icon);
+                        }
+                    }
+                        debugLog(`Failed to load image file: ${item.content}`);
+                        // Fallback to icon
+                        const icon = new St.Icon({
+                            icon_name: 'image-x-generic-symbolic',
+                            icon_size: 16,
+                            style_class: 'clipmaster-item-icon'
+                        });
+                        row.add_child(icon);
+                    }
                 } else {
                     debugLog(`Image file not found: ${item.content}`);
                     // Fallback to icon
