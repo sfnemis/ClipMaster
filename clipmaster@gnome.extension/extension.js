@@ -38,6 +38,8 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import { SignalManager, TimeoutManager, FileUtils, SettingsCache, HashUtils, ValidationUtils } from './utils.js';
+
 
 // ============================================================================
 // Clipboard Item Types
@@ -141,17 +143,18 @@ class ClipboardDatabase {
         this._items = [];
         this._lists = [];
         this._nextId = 1;
-        this._saveTimeoutId = null;
         this._isDirty = false;
         
-        // Debounce delay in milliseconds
+        // Use TimeoutManager for debounced saves
+        this._timeoutManager = new TimeoutManager();
         this._saveDebounceMs = 500;
         
         // Setup encryption if enabled
         this._encryption = null;
         this._setupEncryption();
         
-        this._ensureDirectory();
+        // Use FileUtils for directory operations
+        FileUtils.ensureDirectory(this._storagePath);
         this._load();
     }
     
@@ -170,29 +173,21 @@ class ClipboardDatabase {
         }
     }
     
-    _ensureDirectory() {
-        const dir = GLib.path_get_dirname(this._storagePath);
-        GLib.mkdir_with_parents(dir, 0o755);
-    }
-    
     _load() {
         try {
-            const file = Gio.File.new_for_path(this._storagePath);
-            if (file.query_exists(null)) {
-                const [success, contents] = file.load_contents(null);
-                if (success) {
-                    let jsonStr = new TextDecoder().decode(contents);
-                    
-                    // Check if content is encrypted (starts with base64)
-                    if (this._encryption && jsonStr.startsWith('ENC:')) {
-                        jsonStr = this._encryption.decrypt(jsonStr.substring(4));
-                    }
-                    
-                    const data = JSON.parse(jsonStr);
-                    this._items = data.items || [];
-                    this._lists = data.lists || [];
-                    this._nextId = data.nextId || 1;
+            const jsonStr = FileUtils.loadTextFile(this._storagePath);
+            if (jsonStr) {
+                let decodedStr = jsonStr;
+                
+                // Check if content is encrypted (starts with ENC:)
+                if (this._encryption && decodedStr.startsWith('ENC:')) {
+                    decodedStr = this._encryption.decrypt(decodedStr.substring(4));
                 }
+                
+                const data = JSON.parse(decodedStr);
+                this._items = data.items || [];
+                this._lists = data.lists || [];
+                this._nextId = data.nextId || 1;
             }
         } catch (e) {
             log(`ClipMaster: Error loading database: ${e.message}`);
@@ -205,26 +200,21 @@ class ClipboardDatabase {
     _save() {
         this._isDirty = true;
         
-        // Cancel existing timeout
-        if (this._saveTimeoutId) {
-            GLib.source_remove(this._saveTimeoutId);
-            this._saveTimeoutId = null;
-        }
-        
-        // Schedule new save
-        this._saveTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._saveDebounceMs, () => {
-            this._doSave();
-            this._saveTimeoutId = null;
-            return GLib.SOURCE_REMOVE;
-        });
+        // Use TimeoutManager for debounced save
+        this._timeoutManager.add(
+            GLib.PRIORITY_DEFAULT,
+            this._saveDebounceMs,
+            () => {
+                this._doSave();
+                return GLib.SOURCE_REMOVE;
+            },
+            'database-save'
+        );
     }
     
     // Immediate save - used when extension is disabled
     _saveImmediate() {
-        if (this._saveTimeoutId) {
-            GLib.source_remove(this._saveTimeoutId);
-            this._saveTimeoutId = null;
-        }
+        this._timeoutManager.remove('database-save');
         this._doSave();
     }
     
@@ -245,15 +235,10 @@ class ClipboardDatabase {
                 jsonStr = 'ENC:' + this._encryption.encrypt(jsonStr);
             }
             
-            const file = Gio.File.new_for_path(this._storagePath);
-            file.replace_contents(
-                jsonStr,
-                null, false,
-                Gio.FileCreateFlags.REPLACE_DESTINATION,
-                null
-            );
-            
-            this._isDirty = false;
+            // Use FileUtils for saving
+            if (FileUtils.saveTextFile(this._storagePath, jsonStr)) {
+                this._isDirty = false;
+            }
         } catch (e) {
             log(`ClipMaster: Error saving database: ${e.message}`);
         }
@@ -262,11 +247,13 @@ class ClipboardDatabase {
     // Clean up method to be called when extension is disabled
     destroy() {
         this._saveImmediate();
+        this._timeoutManager.removeAll();
+        this._timeoutManager = null;
     }
     
     addItem(item) {
-        // Check for duplicates by content hash
-        const contentHash = this._hashContent(item.content);
+        // Check for duplicates by content hash using HashUtils
+        const contentHash = HashUtils.hashContent(item.content);
         const existing = this._items.find(i => i.contentHash === contentHash || i.hash === contentHash);
         
         // Check if we should skip duplicates
@@ -325,17 +312,6 @@ class ClipboardDatabase {
         return newItem.id;
     }
     
-    _hashContent(content) {
-        // Simple hash for deduplication
-        let hash = 0;
-        const str = (content || '').substring(0, 10000);
-        for (let i = 0; i < str.length; i++) {
-            const char = str.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash;
-        }
-        return hash.toString(16);
-    }
     
     _moveToTop(itemId) {
         const index = this._items.findIndex(i => i.id === itemId);
@@ -488,7 +464,7 @@ class ClipboardDatabase {
             if (data.items) {
                 // Merge with existing items
                 data.items.forEach(item => {
-                    const hash = this._hashContent(item.content);
+                    const hash = HashUtils.hashContent(item.content);
                     if (!this._items.find(i => i.hash === hash)) {
                         item.id = this._nextId++;
                         this._items.push(item);
@@ -540,59 +516,52 @@ class ClipboardMonitor {
         this._lastContent = null;
         this._lastPrimaryContent = null;
         this._lastImageHash = null; // Global hash for both CLIPBOARD and PRIMARY (prevents duplicates)
-        this._timeoutId = null;
-        this._primaryTimeoutId = null;
-        this._selectionOwnerChangedId = null;
-        this._primarySelectionOwnerChangedId = null;
-        this._primarySelectionSettingId = null;
         this._imageCheckProcess = null;
+        
+        // Use utility managers
+        this._signalManager = new SignalManager();
+        this._timeoutManager = new TimeoutManager();
+        this._settingsCache = new SettingsCache(settings);
         
         // Grace period for PRIMARY selection on startup (to avoid capturing typing)
         // During this period, we'll only update _lastPrimaryContent but not save to history
         this._primaryGracePeriodEnd = 0; // Will be set when tracking starts
         this._primaryGracePeriodMs = 5000; // 5 seconds grace period
         
-        // Cache settings to avoid repeated lookups (MB converted to bytes)
-        // Handle both old (bytes) and new (MB) settings keys for compatibility
-        let maxItemSize, maxImageSize;
-        try {
-            maxItemSize = settings.get_int('max-item-size-mb') * 1024 * 1024;
-        } catch (e) {
-            maxItemSize = 1024 * 1024; // 1MB default
-        }
-        try {
-            maxImageSize = settings.get_int('max-image-size-mb') * 1024 * 1024;
-        } catch (e) {
-            maxImageSize = 5 * 1024 * 1024; // 5MB default
-        }
+        // Cache settings using SettingsCache (MB converted to bytes)
+        const maxItemSize = this._settingsCache.getInt('max-item-size-mb', 1) * 1024 * 1024;
+        const maxImageSize = this._settingsCache.getInt('max-image-size-mb', 5) * 1024 * 1024;
         
         this._cachedSettings = {
-            trackImages: settings.get_boolean('track-images'),
+            trackImages: this._settingsCache.getBoolean('track-images', false),
             maxItemSize: maxItemSize,
             maxImageSize: maxImageSize,
-            historySize: settings.get_int('history-size')
+            historySize: this._settingsCache.getInt('history-size', 100)
         };
         
         // Listen for settings changes
-        this._settingsChangedId = settings.connect('changed', (settings, key) => {
-            this._updateCachedSetting(key);
-        });
+        this._signalManager.connect(
+            settings,
+            'changed',
+            (settings, key) => this._updateCachedSetting(key),
+            'settings-changed'
+        );
     }
     
     _updateCachedSetting(key) {
         try {
             switch (key) {
                 case 'track-images':
-                    this._cachedSettings.trackImages = this._settings.get_boolean('track-images');
+                    this._cachedSettings.trackImages = this._settingsCache.getBoolean('track-images', false);
                     break;
                 case 'max-item-size-mb':
-                    this._cachedSettings.maxItemSize = this._settings.get_int('max-item-size-mb') * 1024 * 1024;
+                    this._cachedSettings.maxItemSize = this._settingsCache.getInt('max-item-size-mb', 1) * 1024 * 1024;
                     break;
                 case 'max-image-size-mb':
-                    this._cachedSettings.maxImageSize = this._settings.get_int('max-image-size-mb') * 1024 * 1024;
+                    this._cachedSettings.maxImageSize = this._settingsCache.getInt('max-image-size-mb', 5) * 1024 * 1024;
                     break;
                 case 'history-size':
-                    this._cachedSettings.historySize = this._settings.get_int('history-size');
+                    this._cachedSettings.historySize = this._settingsCache.getInt('history-size', 100);
                     break;
             }
         } catch (e) {
@@ -602,79 +571,68 @@ class ClipboardMonitor {
     
     start() {
         // Monitor CLIPBOARD selection changes (Ctrl+C/V)
-        this._selectionOwnerChangedId = this._selection.connect(
+        this._signalManager.connect(
+            this._selection,
             'owner-changed',
-            this._onSelectionOwnerChanged.bind(this)
+            this._onSelectionOwnerChanged.bind(this),
+            'selection-owner-changed'
         );
         
         // Monitor PRIMARY selection changes (middle mouse button) - only if enabled
-        if (this._settings.get_boolean('track-primary-selection')) {
-            // Set grace period end time (5 seconds from now)
-            this._primaryGracePeriodEnd = Date.now() + this._primaryGracePeriodMs;
-            debugLog(`Primary selection tracking enabled. Grace period until: ${new Date(this._primaryGracePeriodEnd).toISOString()}`);
-            
-            this._primarySelectionOwnerChangedId = this._selection.connect(
-                'owner-changed',
-                this._onPrimarySelectionOwnerChanged.bind(this)
-            );
-            // Initial check - but don't save during grace period
-            this._checkPrimaryClipboard(true); // true = isInitialCheck
+        if (this._settingsCache.getBoolean('track-primary-selection', false)) {
+            this._enablePrimaryTracking();
         }
         
         // Listen for settings changes
-        this._primarySelectionSettingId = this._settings.connect('changed::track-primary-selection', () => {
-            const enabled = this._settings.get_boolean('track-primary-selection');
-            if (enabled && !this._primarySelectionOwnerChangedId) {
-                // Enable primary selection tracking
-                // Set grace period end time (5 seconds from now)
-                this._primaryGracePeriodEnd = Date.now() + this._primaryGracePeriodMs;
-                debugLog(`Primary selection tracking enabled via settings. Grace period until: ${new Date(this._primaryGracePeriodEnd).toISOString()}`);
-                
-                this._primarySelectionOwnerChangedId = this._selection.connect(
-                    'owner-changed',
-                    this._onPrimarySelectionOwnerChanged.bind(this)
-                );
-                this._checkPrimaryClipboard(true); // true = isInitialCheck
-            } else if (!enabled && this._primarySelectionOwnerChangedId) {
-                // Disable primary selection tracking
-                this._selection.disconnect(this._primarySelectionOwnerChangedId);
-                this._primarySelectionOwnerChangedId = null;
-            }
-        });
+        this._signalManager.connect(
+            this._settings,
+            'changed::track-primary-selection',
+            () => {
+                const enabled = this._settingsCache.getBoolean('track-primary-selection', false);
+                if (enabled) {
+                    this._enablePrimaryTracking();
+                } else {
+                    this._disablePrimaryTracking();
+                }
+            },
+            'primary-selection-setting'
+        );
         
         // Initial check
         this._checkClipboard();
     }
     
+    _enablePrimaryTracking() {
+        // Set grace period end time (5 seconds from now)
+        this._primaryGracePeriodEnd = Date.now() + this._primaryGracePeriodMs;
+        debugLog(`Primary selection tracking enabled. Grace period until: ${new Date(this._primaryGracePeriodEnd).toISOString()}`);
+        
+        this._signalManager.connect(
+            this._selection,
+            'owner-changed',
+            this._onPrimarySelectionOwnerChanged.bind(this),
+            'primary-selection-owner-changed'
+        );
+        
+        // Initial check - but don't save during grace period
+        this._checkPrimaryClipboard(true); // true = isInitialCheck
+    }
+    
+    _disablePrimaryTracking() {
+        this._signalManager.disconnect('primary-selection-owner-changed');
+    }
+    
     stop() {
-        if (this._selectionOwnerChangedId) {
-            this._selection.disconnect(this._selectionOwnerChangedId);
-            this._selectionOwnerChangedId = null;
-        }
+        // Disconnect all signals
+        this._signalManager.disconnectAll();
         
-        if (this._primarySelectionOwnerChangedId) {
-            this._selection.disconnect(this._primarySelectionOwnerChangedId);
-            this._primarySelectionOwnerChangedId = null;
-        }
+        // Remove all timeouts
+        this._timeoutManager.removeAll();
         
-        if (this._settingsChangedId) {
-            this._settings.disconnect(this._settingsChangedId);
-            this._settingsChangedId = null;
-        }
-        
-        if (this._primarySelectionSettingId) {
-            this._settings.disconnect(this._primarySelectionSettingId);
-            this._primarySelectionSettingId = null;
-        }
-        
-        if (this._timeoutId) {
-            GLib.source_remove(this._timeoutId);
-            this._timeoutId = null;
-        }
-        
-        if (this._primaryTimeoutId) {
-            GLib.source_remove(this._primaryTimeoutId);
-            this._primaryTimeoutId = null;
+        // Cleanup settings cache
+        if (this._settingsCache) {
+            this._settingsCache.destroy();
+            this._settingsCache = null;
         }
         
         this._cancelImageCheck();
@@ -695,15 +653,16 @@ class ClipboardMonitor {
         debugLog(`Selection owner changed, type=${selectionType}`);
         if (selectionType === Meta.SelectionType.SELECTION_CLIPBOARD) {
             debugLog(`Clipboard selection changed!`);
-            // Delay to let clipboard settle
-            if (this._timeoutId) {
-                GLib.source_remove(this._timeoutId);
-            }
-            this._timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-                this._checkClipboard();
-                this._timeoutId = null;
-                return GLib.SOURCE_REMOVE;
-            });
+            // Delay to let clipboard settle using TimeoutManager
+            this._timeoutManager.add(
+                GLib.PRIORITY_DEFAULT,
+                100,
+                () => {
+                    this._checkClipboard();
+                    return GLib.SOURCE_REMOVE;
+                },
+                'clipboard-check'
+            );
         }
     }
     
@@ -711,15 +670,16 @@ class ClipboardMonitor {
         debugLog(`Primary selection owner changed, type=${selectionType}`);
         if (selectionType === Meta.SelectionType.SELECTION_PRIMARY) {
             debugLog(`Primary selection changed!`);
-            // Delay to let clipboard settle
-            if (this._primaryTimeoutId) {
-                GLib.source_remove(this._primaryTimeoutId);
-            }
-            this._primaryTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-                this._checkPrimaryClipboard();
-                this._primaryTimeoutId = null;
-                return GLib.SOURCE_REMOVE;
-            });
+            // Delay to let clipboard settle using TimeoutManager
+            this._timeoutManager.add(
+                GLib.PRIORITY_DEFAULT,
+                100,
+                () => {
+                    this._checkPrimaryClipboard();
+                    return GLib.SOURCE_REMOVE;
+                },
+                'primary-clipboard-check'
+            );
         }
     }
     
@@ -905,7 +865,7 @@ class ClipboardMonitor {
                                 // Generate hash for deduplication
                                 const [success, contents] = file.load_contents(null);
                                 if (success) {
-                                    const hash = this._hashImageData(contents);
+                                    const hash = HashUtils.hashImageData(contents);
                                     
                                     // Use global hash for both CLIPBOARD and PRIMARY to prevent duplicates
                                     // When Track Primary Selection is enabled, same image might appear in both
@@ -973,22 +933,9 @@ class ClipboardMonitor {
         }
     }
     
-    _hashImageData(data) {
-        // Simple hash for image deduplication
-        let hash = 0;
-        const view = new Uint8Array(data);
-        const sampleSize = Math.min(view.length, 10000);
-        const step = Math.max(1, Math.floor(view.length / sampleSize));
-        
-        for (let i = 0; i < view.length; i += step) {
-            hash = ((hash << 5) - hash) + view[i];
-            hash = hash & hash;
-        }
-        return hash.toString(16);
-    }
     
     _processText(text, selectionType = 'CLIPBOARD') {
-        if (!text || text.trim() === '') return;
+        if (!ValidationUtils.isValidText(text, 1)) return;
         
         if (text.length > this._cachedSettings.maxItemSize) {
             text = text.substring(0, this._cachedSettings.maxItemSize);
@@ -2793,20 +2740,15 @@ export default class ClipMasterExtension extends Extension {
             // Mark as intentionally showing
             this._popup._isShowing = true;
             
-            // Get popup size from settings with safe defaults
-            let popupWidth = 450;
-            let popupHeight = 550;
-            
-            try {
-                popupWidth = this._settings.get_int('popup-width');
-                popupHeight = this._settings.get_int('popup-height');
-            } catch (e) {
-                // Use defaults
-            }
-            
-            // Ensure valid numbers
-            if (!popupWidth || isNaN(popupWidth) || popupWidth < 300) popupWidth = 450;
-            if (!popupHeight || isNaN(popupHeight) || popupHeight < 300) popupHeight = 550;
+            // Get popup size from settings with safe defaults using ValidationUtils
+            let popupWidth = ValidationUtils.validateNumber(
+                this._settings.get_int('popup-width'),
+                300, 2000, 450
+            );
+            let popupHeight = ValidationUtils.validateNumber(
+                this._settings.get_int('popup-height'),
+                300, 2000, 550
+            );
             
             // Get monitor safely
             const monitor = Main.layoutManager.primaryMonitor;
@@ -2841,11 +2783,9 @@ export default class ClipMasterExtension extends Extension {
                 // Use center position
             }
             
-            // Final safety check
-            if (isNaN(posX) || isNaN(posY)) {
-                posX = 100;
-                posY = 100;
-            }
+            // Final safety check using ValidationUtils
+            posX = ValidationUtils.validateNumber(posX, 0, 10000, 100);
+            posY = ValidationUtils.validateNumber(posY, 0, 10000, 100);
             
             // Set size and position with rounded integers
             this._popup.set_size(Math.round(popupWidth), Math.round(popupHeight));
