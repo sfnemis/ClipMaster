@@ -539,8 +539,7 @@ class ClipboardMonitor {
         this._selection = global.display.get_selection();
         this._lastContent = null;
         this._lastPrimaryContent = null;
-        this._lastImageHash = null;
-        this._lastPrimaryImageHash = null;
+        this._lastImageHash = null; // Global hash for both CLIPBOARD and PRIMARY (prevents duplicates)
         this._timeoutId = null;
         this._primaryTimeoutId = null;
         this._selectionOwnerChangedId = null;
@@ -809,10 +808,11 @@ class ClipboardMonitor {
                 // Same content but skip-duplicates is OFF - process anyway
                 debugLog(`Same primary content but skip-duplicates=OFF, processing anyway...`);
                 this._processText(text, 'PRIMARY');
-            } else if (!text && this._cachedSettings.trackImages) {
-                // No text, check for image
-                this._checkForImage('PRIMARY');
             } else {
+                // IMPORTANT: Do NOT check for images from PRIMARY selection
+                // PRIMARY selection tracking is ONLY for text (middle mouse button paste)
+                // Images should only be tracked from CLIPBOARD (Ctrl+C, right-click Copy Image)
+                // This prevents duplicate entries when an image is copied
                 debugLog(`Same primary content or null, skipping (skipDuplicates=${skipDuplicates})`);
             }
         });
@@ -907,15 +907,11 @@ class ClipboardMonitor {
                                 if (success) {
                                     const hash = this._hashImageData(contents);
                                     
-                                    const isPrimary = selectionType === 'PRIMARY';
-                                    const lastHash = isPrimary ? this._lastPrimaryImageHash : this._lastImageHash;
-                                    
-                                    if (hash !== lastHash) {
-                                        if (isPrimary) {
-                                            this._lastPrimaryImageHash = hash;
-                                        } else {
-                                            this._lastImageHash = hash;
-                                        }
+                                    // Use global hash for both CLIPBOARD and PRIMARY to prevent duplicates
+                                    // When Track Primary Selection is enabled, same image might appear in both
+                                    // Using a single global hash ensures we only add it once
+                                    if (hash !== this._lastImageHash) {
+                                        this._lastImageHash = hash;
                                         
                                         // Store image as base64
                                         const base64 = GLib.base64_encode(contents);
