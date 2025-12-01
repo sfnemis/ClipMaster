@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/GNOME-45%2B-blue?style=flat-square&logo=gnome" alt="GNOME 45+">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License">
+  <img src="https://img.shields.io/badge/License-GPL--2.0-green?style=flat-square" alt="GPL-2.0 License">
   <img src="https://img.shields.io/badge/Platform-Linux-orange?style=flat-square&logo=linux" alt="Linux">
 </p>
 
@@ -216,31 +216,32 @@ Access settings through:
 
 ## 🖼️ Screenshots
 
-### Dark Theme
-```
-┌─────────────────────────────────────┐
-│ 📋 ClipMaster          📝 📌 ➕ ✕  │
-├─────────────────────────────────────┤
-│ 🔍 Search...                        │
-├─────────────────────────────────────┤
-│ ▸ All  │ Text │ Images │ ★ Favs    │
-├─────────────────────────────────────┤
-│ ┌─────────────────────────────────┐ │
-│ │ Hello World                   ★ │ │
-│ │ Yesterday at 14:32              │ │
-│ └─────────────────────────────────┘ │
-│ ┌─────────────────────────────────┐ │
-│ │ npm install clipmaster          │ │
-│ │ Today at 09:15                  │ │
-│ └─────────────────────────────────┘ │
-│ ┌─────────────────────────────────┐ │
-│ │ [Image Preview]               ★ │ │
-│ │ Today at 08:42                  │ │
-│ └─────────────────────────────────┘ │
-├─────────────────────────────────────┤
-│ ↑↓ Nav • Enter Paste • F Fav • ... │
-└─────────────────────────────────────┘
-```
+### Clipboard Popup
+<p align="center">
+  <img src="screenshots/ClipMaster_PopUp.png" alt="ClipMaster Popup" width="400">
+</p>
+
+### Settings
+
+<p align="center">
+  <img src="screenshots/ClipMaster_Settings.png" alt="Settings - General" width="600">
+</p>
+
+<p align="center">
+  <img src="screenshots/ClipMaster_Settings2.png" alt="Settings - Behavior" width="600">
+</p>
+
+<p align="center">
+  <img src="screenshots/ClipMaster_Settings3.png" alt="Settings - Storage" width="600">
+</p>
+
+<p align="center">
+  <img src="screenshots/ClipMaster_Settings4.png" alt="Settings - Appearance" width="600">
+</p>
+
+<p align="center">
+  <img src="screenshots/ClipMaster_Settings5.png" alt="Settings - Advanced" width="600">
+</p>
 
 ---
 
@@ -297,7 +298,7 @@ Contributions are welcome! Feel free to:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GPL-2.0-or-later** License - see the [LICENSE](clipmaster@gnome.extension/LICENSE) file for details.
 
 ---
 
