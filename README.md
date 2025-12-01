@@ -23,6 +23,10 @@
   <img src="https://img.shields.io/badge/Platform-Linux-orange?style=flat-square&logo=linux" alt="Linux">
 </p>
 
+<p align="center">
+  <img src="screenshots/ClipMaster_PopUp.png" alt="ClipMaster Popup" width="450">
+</p>
+
 ---
 
 ## ✨ Features
@@ -215,11 +219,6 @@ Access settings through:
 ---
 
 ## 🖼️ Screenshots
-
-### Clipboard Popup
-<p align="center">
-  <img src="screenshots/ClipMaster_PopUp.png" alt="ClipMaster Popup" width="400">
-</p>
 
 ### Settings
 
