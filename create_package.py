@@ -55,8 +55,9 @@ def create_package():
                 if should_exclude(filepath):
                     continue
                 
-                # Get relative path for zip (relative to extension directory)
-                arcname = filepath.relative_to(EXTENSION_DIR.parent)
+                # Get relative path for zip - files should be at root of zip, not in subdirectory
+                # So we get the path relative to EXTENSION_DIR itself
+                arcname = filepath.relative_to(EXTENSION_DIR)
                 zipf.write(filepath, arcname)
                 print(f"  Added: {arcname}")
     

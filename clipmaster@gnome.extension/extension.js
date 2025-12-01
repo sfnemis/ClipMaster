@@ -763,6 +763,20 @@ class ClipboardMonitor {
             debugLog(`Got text from primary: "${text ? text.substring(0, 50) : 'null'}"`);
             debugLog(`Last primary content was: "${this._lastPrimaryContent ? this._lastPrimaryContent.substring(0, 50) : 'null'}"`);
             
+            // Filter out very short selections (single characters, etc.)
+            // PRIMARY selection often changes when user selects text while typing
+            // We only want to track meaningful selections (3+ characters)
+            if (text) {
+                const trimmedText = text.trim();
+                // Ignore single characters, very short selections, or only whitespace
+                if (trimmedText.length < 3) {
+                    debugLog(`Ignoring PRIMARY selection: too short (${trimmedText.length} chars): "${trimmedText}"`);
+                    // Update lastPrimaryContent to prevent re-processing, but don't save to history
+                    this._lastPrimaryContent = text;
+                    return;
+                }
+            }
+            
             // Check if we're in grace period (first 5 seconds after extension start)
             const now = Date.now();
             const inGracePeriod = now < this._primaryGracePeriodEnd;
