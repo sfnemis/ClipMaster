@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Clipboard base -->
+  <rect x="2" y="2" width="12" height="13" rx="1.5" ry="1.5" 
+        fill="none" stroke="currentColor" stroke-width="1.2"/>
+  
+  <!-- Clipboard clip -->
+  <path d="M5.5 1 L5.5 3 L10.5 3 L10.5 1" 
+        fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+  <rect x="6" y="0.5" width="4" height="2" rx="0.8" ry="0.8" 
+        fill="currentColor"/>
+  
+  <!-- Lines representing text/content -->
+  <line x1="4.5" y1="6" x2="11.5" y2="6" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="4.5" y1="8.5" x2="11.5" y2="8.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="4.5" y1="11" x2="8.5" y2="11" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  
+  <!-- Star accent (for "master"/favorites) -->
+  <polygon points="12,11 12.4,12 13.5,12 12.7,12.7 13,13.8 12,13.2 11,13.8 11.3,12.7 10.5,12 11.6,12" 
+           fill="currentColor"/>
+</svg>
+
+
+
+
+

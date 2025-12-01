@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.clipmaster" path="/org/gnome/shell/extensions/clipmaster/">
+    
+    <!-- Keyboard Shortcuts -->
+    <key name="toggle-popup" type="as">
+      <default>['&lt;Super&gt;v']</default>
+      <summary>Toggle clipboard popup</summary>
+      <description>Keyboard shortcut to show/hide the clipboard popup</description>
+    </key>
+    
+    <key name="paste-as-plain" type="as">
+      <default>['&lt;Ctrl&gt;&lt;Shift&gt;v']</default>
+      <summary>Paste as plain text</summary>
+      <description>Keyboard shortcut to paste clipboard as plain text</description>
+    </key>
+    
+    <!-- History Settings -->
+    <key name="history-size" type="i">
+      <default>100</default>
+      <range min="10" max="5000"/>
+      <summary>History size</summary>
+      <description>Maximum number of items to keep in clipboard history</description>
+    </key>
+    
+    <key name="max-item-size-mb" type="i">
+      <default>1</default>
+      <range min="1" max="10"/>
+      <summary>Maximum item size in MB</summary>
+      <description>Maximum size of a single clipboard item in megabytes</description>
+    </key>
+    
+    <key name="max-image-size-mb" type="i">
+      <default>5</default>
+      <range min="1" max="50"/>
+      <summary>Maximum image size in MB</summary>
+      <description>Maximum size of images to store in megabytes</description>
+    </key>
+    
+    <!-- Storage Settings -->
+    <key name="storage-path" type="s">
+      <default>''</default>
+      <summary>Custom storage path</summary>
+      <description>Custom path for storing clipboard database. Empty means use default location.</description>
+    </key>
+    
+    <!-- Behavior Settings -->
+    <key name="track-images" type="b">
+      <default>true</default>
+      <summary>Track images</summary>
+      <description>Whether to track images in clipboard history</description>
+    </key>
+    
+    <key name="track-files" type="b">
+      <default>true</default>
+      <summary>Track files</summary>
+      <description>Whether to track file copies in clipboard history</description>
+    </key>
+    
+    <key name="strip-whitespace" type="b">
+      <default>false</default>
+      <summary>Strip whitespace</summary>
+      <description>Strip leading and trailing whitespace from text items</description>
+    </key>
+    
+    <key name="paste-on-select" type="b">
+      <default>true</default>
+      <summary>Paste on selection</summary>
+      <description>Automatically paste when selecting an item</description>
+    </key>
+    
+    <key name="close-on-paste" type="b">
+      <default>true</default>
+      <summary>Close popup after paste</summary>
+      <description>Close the popup window after pasting an item</description>
+    </key>
+    
+    <key name="show-notification" type="b">
+      <default>false</default>
+      <summary>Show notifications</summary>
+      <description>Show notification when copying items</description>
+    </key>
+    
+    <key name="skip-duplicates" type="b">
+      <default>true</default>
+      <summary>Skip duplicate items</summary>
+      <description>Don't add duplicate items to clipboard history</description>
+    </key>
+    
+    <key name="max-db-size-mb" type="i">
+      <default>50</default>
+      <range min="10" max="500"/>
+      <summary>Maximum database size in MB</summary>
+      <description>Maximum total size of clipboard database in megabytes</description>
+    </key>
+    
+    <!-- Display Settings -->
+    <key name="popup-at-cursor" type="b">
+      <default>true</default>
+      <summary>Show popup at cursor</summary>
+      <description>Show popup at current mouse position instead of center</description>
+    </key>
+    
+    <key name="preview-length" type="i">
+      <default>80</default>
+      <range min="20" max="500"/>
+      <summary>Preview text length</summary>
+      <description>Maximum characters to show in item preview</description>
+    </key>
+    
+    <key name="items-per-page" type="i">
+      <default>15</default>
+      <range min="5" max="50"/>
+      <summary>Items per page</summary>
+      <description>Number of items to show in popup</description>
+    </key>
+    
+    <!-- Excluded Applications -->
+    <key name="excluded-apps" type="as">
+      <default>[]</default>
+      <summary>Excluded applications</summary>
+      <description>List of applications to exclude from clipboard tracking</description>
+    </key>
+    
+    <!-- Custom Lists (stored as JSON string) -->
+    <key name="custom-lists" type="s">
+      <default>'[]'</default>
+      <summary>Custom lists</summary>
+      <description>JSON array of custom lists</description>
+    </key>
+    
+    <!-- Panel Indicator -->
+    <key name="show-indicator" type="b">
+      <default>true</default>
+      <summary>Show panel indicator</summary>
+      <description>Show ClipMaster indicator in the top panel</description>
+    </key>
+    
+    <key name="indicator-icon" type="s">
+      <default>'edit-paste-symbolic'</default>
+      <summary>Indicator icon</summary>
+      <description>Icon to show in panel indicator</description>
+    </key>
+    
+    <!-- Appearance Settings -->
+    <key name="popup-width" type="i">
+      <default>450</default>
+      <range min="300" max="800"/>
+      <summary>Popup width</summary>
+      <description>Width of the popup window in pixels</description>
+    </key>
+    
+    <key name="popup-height" type="i">
+      <default>550</default>
+      <range min="300" max="900"/>
+      <summary>Popup height</summary>
+      <description>Height of the popup window in pixels</description>
+    </key>
+    
+    <key name="dark-theme" type="b">
+      <default>true</default>
+      <summary>Dark theme</summary>
+      <description>Use dark theme for popup (false for light theme)</description>
+    </key>
+    
+    <!-- Security Settings -->
+    <key name="encrypt-database" type="b">
+      <default>true</default>
+      <summary>Encrypt database</summary>
+      <description>Encrypt clipboard database for security</description>
+    </key>
+    
+    <key name="encryption-key" type="s">
+      <default>''</default>
+      <summary>Encryption key</summary>
+      <description>Auto-generated encryption key (do not modify manually)</description>
+    </key>
+    
+    <!-- Debug Settings -->
+    <key name="debug-mode" type="b">
+      <default>false</default>
+      <summary>Debug mode</summary>
+      <description>Enable debug logging for troubleshooting. Logs can be viewed with: journalctl -f /usr/bin/gnome-shell | grep ClipMaster</description>
+    </key>
+    
+  </schema>
+</schemalist>
+

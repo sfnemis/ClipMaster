@@ -1,0 +1,11 @@
+{
+    "uuid": "clipmaster@gnome.extension",
+    "name": "ClipMaster",
+    "description": "Powerful clipboard manager with history, favorites, lists, image support, and more. Inspired by Copy 'Em for Mac.",
+    "version": 1,
+    "shell-version": ["45", "46", "47", "48", "49"],
+    "url": "https://github.com/clipmaster",
+    "settings-schema": "org.gnome.shell.extensions.clipmaster",
+    "gettext-domain": "clipmaster"
+}
+

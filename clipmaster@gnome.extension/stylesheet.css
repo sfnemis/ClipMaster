@@ -1,0 +1,395 @@
+/* ClipMaster - GNOME Shell Extension Stylesheet */
+
+/* ============================================
+   Main Popup Window - Dark Theme (Default)
+   ============================================ */
+.clipmaster-popup {
+    background-color: #1e1e2e;
+    border: 1px solid #45475a;
+    border-radius: 16px;
+    padding: 0;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Light Theme */
+.clipmaster-popup.light {
+    background-color: #eff1f5;
+    border-color: #ccd0da;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+/* Header */
+.clipmaster-header {
+    padding: 14px 16px 12px 16px;
+    border-bottom: 1px solid #313244;
+    spacing: 10px;
+}
+
+.clipmaster-popup.light .clipmaster-header {
+    border-bottom-color: #ccd0da;
+}
+
+/* Drag Handle */
+.clipmaster-drag-handle {
+    font-size: 14px;
+    color: #6c7086;
+    padding: 0 4px;
+    cursor: move;
+}
+
+.clipmaster-popup.light .clipmaster-drag-handle {
+    color: #9ca0b0;
+}
+
+/* Header Icon */
+.clipmaster-header-icon {
+    color: #89b4fa;
+    margin-right: 4px;
+}
+
+.clipmaster-popup.light .clipmaster-header-icon {
+    color: #1e66f5;
+}
+
+/* Title */
+.clipmaster-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #cdd6f4;
+    margin-left: 2px;
+}
+
+.clipmaster-popup.light .clipmaster-title {
+    color: #4c4f69;
+}
+
+.clipmaster-toggle-button,
+.clipmaster-close-button {
+    background-color: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 6px;
+    color: #a6adc8;
+}
+
+.clipmaster-popup.light .clipmaster-toggle-button,
+.clipmaster-popup.light .clipmaster-close-button {
+    color: #6c6f85;
+}
+
+.clipmaster-toggle-button:hover,
+.clipmaster-close-button:hover {
+    background-color: #313244;
+}
+
+.clipmaster-popup.light .clipmaster-toggle-button:hover,
+.clipmaster-popup.light .clipmaster-close-button:hover {
+    background-color: #ccd0da;
+}
+
+.clipmaster-toggle-button:checked {
+    background-color: #fab387;
+    color: #1e1e2e;
+}
+
+.clipmaster-popup.light .clipmaster-toggle-button:checked {
+    background-color: #fe640b;
+    color: #eff1f5;
+}
+
+/* Search Bar */
+.clipmaster-search {
+    margin: 12px 16px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background-color: #313244;
+    border: 1px solid #45475a;
+    color: #cdd6f4;
+    font-size: 14px;
+}
+
+.clipmaster-popup.light .clipmaster-search {
+    background-color: #e6e9ef;
+    border-color: #ccd0da;
+    color: #4c4f69;
+}
+
+.clipmaster-search:focus {
+    border-color: #89b4fa;
+    box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.2);
+}
+
+.clipmaster-popup.light .clipmaster-search:focus {
+    border-color: #1e66f5;
+    box-shadow: 0 0 0 2px rgba(30, 102, 245, 0.2);
+}
+
+.clipmaster-search StEntry {
+    color: #cdd6f4;
+}
+
+.clipmaster-popup.light .clipmaster-search StEntry {
+    color: #4c4f69;
+}
+
+.clipmaster-search:hover {
+    background-color: #363a4f;
+}
+
+.clipmaster-popup.light .clipmaster-search:hover {
+    background-color: #dce0e8;
+}
+
+/* Filter Bar */
+.clipmaster-filter-bar {
+    padding: 8px 16px;
+    spacing: 8px;
+    border-bottom: 1px solid #313244;
+}
+
+.clipmaster-popup.light .clipmaster-filter-bar {
+    border-bottom-color: #ccd0da;
+}
+
+.clipmaster-filter-button {
+    background-color: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: #a6adc8;
+    font-size: 12px;
+}
+
+.clipmaster-popup.light .clipmaster-filter-button {
+    color: #6c6f85;
+}
+
+.clipmaster-filter-button:hover {
+    background-color: #313244;
+}
+
+.clipmaster-popup.light .clipmaster-filter-button:hover {
+    background-color: #ccd0da;
+}
+
+.clipmaster-filter-button.active {
+    background-color: #89b4fa;
+    color: #1e1e2e;
+}
+
+.clipmaster-popup.light .clipmaster-filter-button.active {
+    background-color: #1e66f5;
+    color: #eff1f5;
+}
+
+/* Scroll View */
+.clipmaster-scroll {
+    padding: 0;
+}
+
+/* Items Container */
+.clipmaster-items {
+    padding: 8px 0;
+    spacing: 2px;
+}
+
+/* Individual Item Row */
+.clipmaster-item {
+    padding: 10px 16px;
+    margin: 0 8px;
+    border-radius: 10px;
+    spacing: 10px;
+    transition: background-color 150ms ease;
+}
+
+.clipmaster-item:hover {
+    background-color: rgba(137, 180, 250, 0.1);
+}
+
+.clipmaster-popup.light .clipmaster-item:hover {
+    background-color: rgba(30, 102, 245, 0.1);
+}
+
+.clipmaster-item.selected {
+    background-color: #89b4fa;
+}
+
+.clipmaster-popup.light .clipmaster-item.selected {
+    background-color: #1e66f5;
+}
+
+.clipmaster-item.selected * {
+    color: #1e1e2e !important;
+}
+
+.clipmaster-popup.light .clipmaster-item.selected * {
+    color: #eff1f5 !important;
+}
+
+.clipmaster-item-number {
+    font-family: monospace;
+    font-weight: bold;
+    font-size: 11px;
+    color: #6c7086;
+    min-width: 20px;
+    text-align: center;
+}
+
+.clipmaster-popup.light .clipmaster-item-number {
+    color: #8c8fa1;
+}
+
+.clipmaster-item-icon {
+    color: #6c7086;
+}
+
+.clipmaster-popup.light .clipmaster-item-icon {
+    color: #8c8fa1;
+}
+
+.clipmaster-item-thumbnail {
+    border-radius: 6px;
+    background-color: #313244;
+    min-width: 32px;
+    min-height: 32px;
+}
+
+.clipmaster-popup.light .clipmaster-item-thumbnail {
+    background-color: #ccd0da;
+}
+
+.clipmaster-item-content {
+    spacing: 4px;
+}
+
+.clipmaster-item-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #cdd6f4;
+}
+
+.clipmaster-popup.light .clipmaster-item-title {
+    color: #4c4f69;
+}
+
+.clipmaster-item-preview {
+    font-size: 12px;
+    color: #bac2de;
+}
+
+.clipmaster-popup.light .clipmaster-item-preview {
+    color: #5c5f77;
+}
+
+.clipmaster-item-preview.dim {
+    color: #6c7086;
+    font-size: 11px;
+}
+
+.clipmaster-popup.light .clipmaster-item-preview.dim {
+    color: #8c8fa1;
+}
+
+.clipmaster-item-fav {
+    color: #f9e2af;
+}
+
+.clipmaster-popup.light .clipmaster-item-fav {
+    color: #df8e1d;
+}
+
+/* Empty State */
+.clipmaster-empty {
+    padding: 40px 20px;
+    color: #6c7086;
+    font-size: 14px;
+}
+
+.clipmaster-popup.light .clipmaster-empty {
+    color: #8c8fa1;
+}
+
+/* ============================================
+   Footer - SIMPLIFIED & READABLE
+   ============================================ */
+.clipmaster-footer {
+    padding: 10px 16px;
+    border-top: 1px solid #313244;
+    spacing: 8px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 0 0 16px 16px;
+}
+
+.clipmaster-popup.light .clipmaster-footer {
+    border-top-color: #ccd0da;
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.clipmaster-footer-text {
+    font-size: 11px;
+    color: #a6adc8;
+    font-family: "SF Pro", "Cantarell", sans-serif;
+    letter-spacing: 0.3px;
+}
+
+.clipmaster-popup.light .clipmaster-footer-text {
+    color: #6c6f85;
+}
+
+
+/* ============================================
+   Panel Indicator Menu
+   ============================================ */
+.clipmaster-indicator-menu {
+    min-width: 300px;
+}
+
+/* ============================================
+   Dialogs
+   ============================================ */
+.clipmaster-dialog {
+    background-color: #1e1e2e;
+    border-radius: 16px;
+    padding: 24px;
+}
+
+.clipmaster-dialog-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #cdd6f4;
+    margin-bottom: 16px;
+}
+
+.clipmaster-dialog-entry {
+    background-color: #313244;
+    border: 1px solid #45475a;
+    border-radius: 8px;
+    padding: 12px;
+    color: #cdd6f4;
+    min-width: 300px;
+}
+
+.clipmaster-dialog-entry:focus {
+    border-color: #89b4fa;
+}
+
+/* ============================================
+   Color Schemes Reference
+   ============================================ */
+/*
+   DARK THEME - Catppuccin Mocha:
+   Base: #1e1e2e
+   Surface0: #313244
+   Surface1: #45475a
+   Text: #cdd6f4
+   Blue: #89b4fa
+   Pink: #f5c2e7
+   
+   LIGHT THEME - Catppuccin Latte:
+   Base: #eff1f5
+   Surface0: #ccd0da
+   Surface1: #bcc0cc
+   Text: #4c4f69
+   Blue: #1e66f5
+   Mauve: #8839ef
+*/
