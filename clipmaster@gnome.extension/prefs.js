@@ -860,9 +860,41 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
                     }
                     
                     // Check if file is empty or invalid
-                    const contentStr = new TextDecoder().decode(contents);
+                    let contentStr = new TextDecoder().decode(contents);
                     if (!contentStr || contentStr.trim() === '') {
                         throw new Error(_('Database file is empty'));
+                    }
+                    
+                    // Check if content is encrypted (starts with ENC:)
+                    const isEncrypted = contentStr.startsWith('ENC:');
+                    if (isEncrypted) {
+                        // Decrypt the content
+                        const encryptDb = settings.get_boolean('encrypt-database');
+                        if (!encryptDb) {
+                            throw new Error(_('Database is encrypted but encryption is disabled in settings'));
+                        }
+                        
+                        const encryptionKey = settings.get_string('encryption-key');
+                        if (!encryptionKey) {
+                            throw new Error(_('Encryption key not found. Cannot decrypt database.'));
+                        }
+                        
+                        // Simple XOR decryption (same as in extension.js)
+                        try {
+                            const encryptedData = contentStr.substring(4); // Remove 'ENC:' prefix
+                            const decoded = GLib.base64_decode(encryptedData);
+                            const decodedStr = new TextDecoder().decode(decoded);
+                            
+                            let decrypted = '';
+                            for (let i = 0; i < decodedStr.length; i++) {
+                                const charCode = decodedStr.charCodeAt(i) ^ encryptionKey.charCodeAt(i % encryptionKey.length);
+                                decrypted += String.fromCharCode(charCode);
+                            }
+                            contentStr = decrypted;
+                        } catch (decryptError) {
+                            log(`ClipMaster: Decryption error: ${decryptError.message}`);
+                            throw new Error(_('Failed to decrypt database. Encryption key may be incorrect.'));
+                        }
                     }
                     
                     let data;
@@ -886,10 +918,29 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
                     const afterCount = data.items.length;
                     const removedCount = beforeCount - afterCount;
                     
+                    let jsonStr = JSON.stringify(data, null, 2);
+                    
+                    // Encrypt if encryption is enabled
+                    if (isEncrypted) {
+                        const encryptionKey = settings.get_string('encryption-key');
+                        if (encryptionKey) {
+                            // Simple XOR encryption (same as in extension.js)
+                            let encrypted = '';
+                            for (let i = 0; i < jsonStr.length; i++) {
+                                const charCode = jsonStr.charCodeAt(i) ^ encryptionKey.charCodeAt(i % encryptionKey.length);
+                                encrypted += String.fromCharCode(charCode);
+                            }
+                            // Encode to base64 and add ENC: prefix
+                            const encoder = new TextEncoder();
+                            const base64Encoded = GLib.base64_encode(encoder.encode(encrypted));
+                            jsonStr = 'ENC:' + base64Encoded;
+                        }
+                    }
+                    
+                    // Write to file (as string, not encoded - extension.js does the same)
                     const encoder = new TextEncoder();
-                    const jsonStr = JSON.stringify(data, null, 2);
                     file.replace_contents(
-                        encoder.encode(jsonStr),
+                        jsonStr,
                         null, false,
                         Gio.FileCreateFlags.REPLACE_DESTINATION,
                         null
