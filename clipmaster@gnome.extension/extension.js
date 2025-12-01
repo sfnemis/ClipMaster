@@ -1064,19 +1064,32 @@ class ClipboardPopup extends St.BoxLayout {
         // Modal overlay for click-outside detection
         this._modalOverlay = null;
         
+        // Use utility managers for proper lifecycle management
+        this._signalManager = new SignalManager();
+        this._timeoutManager = new TimeoutManager();
+        
         // Apply theme
         this._applyTheme();
         
-        // Listen for theme changes
-        this._themeChangedId = this._settings.connect('changed::dark-theme', () => {
-            this._applyTheme();
-        });
-        this._themeNameChangedId = this._settings.connect('changed::theme', () => {
-            this._applyTheme();
-        });
-        this._customThemeChangedId = this._settings.connect('changed::custom-theme-path', () => {
-            this._applyTheme();
-        });
+        // Listen for theme changes using SignalManager
+        this._signalManager.connect(
+            this._settings,
+            'changed::dark-theme',
+            () => this._applyTheme(),
+            'theme-dark-changed'
+        );
+        this._signalManager.connect(
+            this._settings,
+            'changed::theme',
+            () => this._applyTheme(),
+            'theme-name-changed'
+        );
+        this._signalManager.connect(
+            this._settings,
+            'changed::custom-theme-path',
+            () => this._applyTheme(),
+            'theme-custom-changed'
+        );
         
         this._buildUI();
         this._connectSignals();
@@ -1525,32 +1538,43 @@ class ClipboardPopup extends St.BoxLayout {
             }
             
             debugLog(`Connecting motion-event to global.stage`);
-            this._dragMotionId = global.stage.connect('motion-event', (actor, motionEvent) => {
-                if (!this._dragging) return Clutter.EVENT_PROPAGATE;
-                
-                try {
-                    const [currentX, currentY] = motionEvent.get_coords();
-                    if (isNaN(currentX) || isNaN(currentY)) return Clutter.EVENT_PROPAGATE;
+            // Use SignalManager for drag signals
+            this._signalManager.connect(
+                global.stage,
+                'motion-event',
+                (actor, motionEvent) => {
+                    if (!this._dragging) return Clutter.EVENT_PROPAGATE;
                     
-                    const newX = Math.round(this._dragStartPosX + (currentX - this._dragStartX));
-                    const newY = Math.round(this._dragStartPosY + (currentY - this._dragStartY));
-                    
-                    if (!isNaN(newX) && !isNaN(newY)) {
-                        this.set_position(newX, newY);
+                    try {
+                        const [currentX, currentY] = motionEvent.get_coords();
+                        if (isNaN(currentX) || isNaN(currentY)) return Clutter.EVENT_PROPAGATE;
+                        
+                        const newX = Math.round(this._dragStartPosX + (currentX - this._dragStartX));
+                        const newY = Math.round(this._dragStartPosY + (currentY - this._dragStartY));
+                        
+                        if (!isNaN(newX) && !isNaN(newY)) {
+                            this.set_position(newX, newY);
+                        }
+                    } catch (e) {
+                        debugLog(`Drag motion error: ${e.message}`);
                     }
-                } catch (e) {
-                    debugLog(`Drag motion error: ${e.message}`);
-                }
-                return Clutter.EVENT_STOP;
-            });
+                    return Clutter.EVENT_STOP;
+                },
+                'drag-motion'
+            );
             
-            this._dragReleaseId = global.stage.connect('button-release-event', () => {
-                debugLog(`Drag released`);
-                this._stopDrag();
-                return Clutter.EVENT_STOP;
-            });
+            this._signalManager.connect(
+                global.stage,
+                'button-release-event',
+                () => {
+                    debugLog(`Drag released`);
+                    this._stopDrag();
+                    return Clutter.EVENT_STOP;
+                },
+                'drag-release'
+            );
             
-            debugLog(`Drag setup complete, motionId=${this._dragMotionId}, releaseId=${this._dragReleaseId}`);
+            debugLog(`Drag setup complete using SignalManager`);
         } catch (e) {
             debugLog(`Start drag error: ${e.message}`);
             this._dragging = false;
@@ -1559,16 +1583,9 @@ class ClipboardPopup extends St.BoxLayout {
     
     _stopDrag() {
         this._dragging = false;
-        try {
-            if (this._dragMotionId) {
-                global.stage.disconnect(this._dragMotionId);
-                this._dragMotionId = null;
-            }
-            if (this._dragReleaseId) {
-                global.stage.disconnect(this._dragReleaseId);
-                this._dragReleaseId = null;
-            }
-        } catch (e) { /* ignore */ }
+        // Use SignalManager to disconnect drag signals
+        this._signalManager.disconnect('drag-motion');
+        this._signalManager.disconnect('drag-release');
     }
     
     _connectSignals() {
@@ -1582,28 +1599,19 @@ class ClipboardPopup extends St.BoxLayout {
     
     _removeModalOverlay() {
         this._stopDrag();
-        if (this._clickOutsideId) {
-            try {
-                global.stage.disconnect(this._clickOutsideId);
-            } catch (e) { /* ignore */ }
-            this._clickOutsideId = null;
-        }
+        // Use SignalManager to disconnect click outside handler
+        this._signalManager.disconnect('click-outside-handler');
     }
     
     _setupClickOutside() {
-        // Remove existing handler first
-        if (this._clickOutsideId) {
-            debugLog('Removing existing click outside handler');
-            try {
-                global.stage.disconnect(this._clickOutsideId);
-            } catch (e) {
-                debugLog(`Error removing handler: ${e.message}`);
-            }
-            this._clickOutsideId = null;
-        }
+        // Remove existing handler first using SignalManager
+        this._signalManager.disconnect('click-outside-handler');
         
         debugLog('Setting up click outside handler');
-        this._clickOutsideId = global.stage.connect('button-press-event', (actor, event) => {
+        this._signalManager.connect(
+            global.stage,
+            'button-press-event',
+            (actor, event) => {
             if (!this.visible || !this._isShowing) {
                 return Clutter.EVENT_PROPAGATE;
             }
@@ -1645,8 +1653,9 @@ class ClipboardPopup extends St.BoxLayout {
             } catch (e) {
                 debugLog(`Click outside error: ${e.message}`);
                 return Clutter.EVENT_PROPAGATE;
-            }
-        });
+            },
+            'click-outside-handler'
+        );
     }
     
     _setFilter(listId, type = null) {
@@ -1699,16 +1708,22 @@ class ClipboardPopup extends St.BoxLayout {
         
         // Setup click outside handler after popup is visible (longer delay to prevent immediate closing)
         // Use longer delay to ensure popup is fully rendered and user has time to see it
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 800, () => {
-            if (this._isShowing && this.visible) {
-                debugLog('Setting up click outside handler after 800ms delay');
-                this._setupClickOutside();
-                this.grab_key_focus();
-            } else {
-                debugLog(`Not setting up click outside - isShowing=${this._isShowing}, visible=${this.visible}`);
-            }
-            return GLib.SOURCE_REMOVE;
-        });
+        // Use TimeoutManager for proper cleanup
+        this._timeoutManager.add(
+            GLib.PRIORITY_DEFAULT,
+            800,
+            () => {
+                if (this._isShowing && this.visible) {
+                    debugLog('Setting up click outside handler after 800ms delay');
+                    this._setupClickOutside();
+                    this.grab_key_focus();
+                } else {
+                    debugLog(`Not setting up click outside - isShowing=${this._isShowing}, visible=${this.visible}`);
+                }
+                return GLib.SOURCE_REMOVE;
+            },
+            'click-outside-setup'
+        );
     }
     
     hide() {
@@ -1728,22 +1743,22 @@ class ClipboardPopup extends St.BoxLayout {
         debugLog('Popup hidden');
     }
     
-    destroy() {
+    // GJS best practice: dispose() for cleanup before destroy()
+    vfunc_dispose() {
+        // Cleanup all signals using SignalManager
+        if (this._signalManager) {
+            this._signalManager.disconnectAll();
+            this._signalManager = null;
+        }
+        
+        // Cleanup all timeouts using TimeoutManager
+        if (this._timeoutManager) {
+            this._timeoutManager.removeAll();
+            this._timeoutManager = null;
+        }
+        
         this._removeModalOverlay();
         this._stopDrag();
-        
-        if (this._themeChangedId) {
-            this._settings.disconnect(this._themeChangedId);
-            this._themeChangedId = null;
-        }
-        if (this._themeNameChangedId) {
-            this._settings.disconnect(this._themeNameChangedId);
-            this._themeNameChangedId = null;
-        }
-        if (this._customThemeChangedId) {
-            this._settings.disconnect(this._customThemeChangedId);
-            this._customThemeChangedId = null;
-        }
         
         // Unload custom stylesheet if any
         if (this._customStylesheet) {
@@ -1752,10 +1767,22 @@ class ClipboardPopup extends St.BoxLayout {
                 theme.unload_stylesheet(this._customStylesheet);
                 this._customStylesheet = null;
             } catch (e) {
-                log(`ClipMaster: Error unloading custom theme on destroy: ${e.message}`);
+                log(`ClipMaster: Error unloading custom theme on dispose: ${e.message}`);
             }
         }
         
+        // Clear references
+        this._extension = null;
+        this._settings = null;
+        this._database = null;
+        this._monitor = null;
+        
+        super.vfunc_dispose();
+    }
+    
+    destroy() {
+        // Ensure dispose is called first
+        this.vfunc_dispose();
         super.destroy();
     }
     
@@ -1852,7 +1879,11 @@ class ClipboardPopup extends St.BoxLayout {
                 // Store timeout ID to cancel if user moves away
                 if (row._pasteTimeoutId) {
                     debugLog(`Cancelling existing paste timeout for row ${index}`);
-                    GLib.source_remove(row._pasteTimeoutId);
+                    try {
+                        GLib.source_remove(row._pasteTimeoutId);
+                    } catch (e) {
+                        debugLog(`Error removing existing paste timeout: ${e.message}`);
+                    }
                     row._pasteTimeoutId = null;
                 }
                 
@@ -1890,7 +1921,11 @@ class ClipboardPopup extends St.BoxLayout {
             debugLog(`LEAVE EVENT on row ${index}`);
             if (row._pasteTimeoutId) {
                 debugLog(`Cancelling paste timeout for item ${index} (user left row)`);
-                GLib.source_remove(row._pasteTimeoutId);
+                try {
+                    GLib.source_remove(row._pasteTimeoutId);
+                } catch (e) {
+                    debugLog(`Error removing paste timeout on leave: ${e.message}`);
+                }
                 row._pasteTimeoutId = null;
             }
         });
@@ -2561,12 +2596,18 @@ export default class ClipMasterExtension extends Extension {
         this._settings = this.getSettings();
         this._extensionPath = this.path;  // Store extension path for icon loading
         
+        // Use SignalManager for proper signal lifecycle management
+        this._signalManager = new SignalManager();
+        
         // Setup debug mode from settings
         _debugSettings = this._settings;
         setDebugMode(this._settings.get_boolean('debug-mode'));
-        this._debugModeChangedId = this._settings.connect('changed::debug-mode', () => {
-            setDebugMode(this._settings.get_boolean('debug-mode'));
-        });
+        this._signalManager.connect(
+            this._settings,
+            'changed::debug-mode',
+            () => setDebugMode(this._settings.get_boolean('debug-mode')),
+            'debug-mode-changed'
+        );
         
         // Initialize database with settings for encryption support
         const storagePath = this._settings.get_string('storage-path');
@@ -2639,10 +2680,10 @@ export default class ClipMasterExtension extends Extension {
             this._database = null;
         }
         
-        // Disconnect debug mode listener
-        if (this._debugModeChangedId) {
-            this._settings.disconnect(this._debugModeChangedId);
-            this._debugModeChangedId = null;
+        // Disconnect all signals using SignalManager
+        if (this._signalManager) {
+            this._signalManager.disconnectAll();
+            this._signalManager = null;
         }
         
         _debugSettings = null;
