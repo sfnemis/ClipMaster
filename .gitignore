@@ -1,0 +1,36 @@
+# Compiled schemas (auto-generated)
+clipmaster@gnome.extension/schemas/gschemas.compiled
+
+# Extension zip files
+*.zip
+*.shell-extension.zip
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Node modules (if any)
+node_modules/
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test and development files
+*_test.sh
+*_test.py
+PERFORMANCE_ANALYSIS.md
+EXTENSIONS_GNOME_ORG_DESCRIPTION*.md
+
