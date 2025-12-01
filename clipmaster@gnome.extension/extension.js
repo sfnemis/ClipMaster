@@ -2082,15 +2082,6 @@ class ClipboardPopup extends St.BoxLayout {
                             row.add_child(icon);
                         }
                     }
-                        debugLog(`Failed to load image file: ${item.content}`);
-                        // Fallback to icon
-                        const icon = new St.Icon({
-                            icon_name: 'image-x-generic-symbolic',
-                            icon_size: 16,
-                            style_class: 'clipmaster-item-icon'
-                        });
-                        row.add_child(icon);
-                    }
                 } else {
                     debugLog(`Image file not found: ${item.content}`);
                     // Fallback to icon
