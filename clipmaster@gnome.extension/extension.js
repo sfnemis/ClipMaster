@@ -1036,56 +1036,37 @@ class ClipboardMonitor {
             text = text.replace(/<[^>]*>/g, '');
         }
         this._lastContent = text; // Prevent re-adding
-        // Always copy to CLIPBOARD
+        // Always copy to CLIPBOARD only
+        // IMPORTANT: Do NOT copy to PRIMARY selection when programmatically copying
+        // PRIMARY selection should only be tracked when user manually selects (middle mouse button)
+        // Copying to PRIMARY here would cause duplicate entries when Track Primary Selection is enabled
         this._clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
-        
-        // Also copy to PRIMARY selection if tracking is enabled
-        try {
-            if (this._settings.get_boolean('track-primary-selection')) {
-                this._clipboard.set_text(St.ClipboardType.PRIMARY, text);
-                this._lastPrimaryContent = text; // Prevent re-adding to PRIMARY
-            }
-        } catch (e) {
-            log(`ClipMaster: Error copying to PRIMARY selection: ${e.message}`);
-        }
     }
     
     copyImageToClipboard(imagePath) {
         // Use wl-copy/xclip to copy image back to clipboard
+        // IMPORTANT: Only copy to CLIPBOARD, NOT to PRIMARY selection
+        // This prevents duplicate entries when Track Primary Selection is enabled
+        // PRIMARY selection should only be tracked when user manually selects (middle mouse button)
         const isWayland = GLib.getenv('XDG_SESSION_TYPE') === 'wayland';
         
         try {
             if (isWayland) {
-                // wl-copy reads from stdin - copy to CLIPBOARD
+                // wl-copy reads from stdin - copy to CLIPBOARD only
                 const procClipboard = Gio.Subprocess.new(
                     ['bash', '-c', `cat "${imagePath}" | wl-copy --type image/png`],
                     Gio.SubprocessFlags.NONE
                 );
                 procClipboard.wait_async(null, null);
-                
-                // Note: wl-copy doesn't support PRIMARY selection directly
-                // PRIMARY selection for images in Wayland is limited
-                // We'll copy to CLIPBOARD and user can use Ctrl+V
             } else {
-                // X11 - copy to CLIPBOARD
+                // X11 - copy to CLIPBOARD only (not PRIMARY)
+                // We don't copy to PRIMARY to avoid duplicate entries
+                // PRIMARY selection tracking is for manual user selections only
                 const procClipboard = Gio.Subprocess.new(
                     ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i', imagePath],
                     Gio.SubprocessFlags.NONE
                 );
                 procClipboard.wait_async(null, null);
-                
-                // Also copy to PRIMARY selection if tracking is enabled
-                try {
-                    if (this._settings.get_boolean('track-primary-selection')) {
-                        const procPrimary = Gio.Subprocess.new(
-                            ['xclip', '-selection', 'primary', '-t', 'image/png', '-i', imagePath],
-                            Gio.SubprocessFlags.NONE
-                        );
-                        procPrimary.wait_async(null, null);
-                    }
-                } catch (e) {
-                    log(`ClipMaster: Error copying image to PRIMARY selection: ${e.message}`);
-                }
             }
         } catch (e) {
             log(`ClipMaster: Error copying image to clipboard: ${e.message}`);
