@@ -1,7 +1,7 @@
 {
     "uuid": "clipmaster@gnome.extension",
     "name": "ClipMaster",
-    "description": "A powerful clipboard manager for GNOME. Features include clipboard history, favorites, custom lists, image support, search, keyboard shortcuts, dark/light themes, encrypted storage, and more.",
+    "description": "A powerful clipboard manager for GNOME with unlimited history, 12 beautiful themes (Gruvbox, Dracula, Nord, Catppuccin, One Dark, Adwaita, Monokai, Solarized, Tokyo Night, Rose Pine, Material, Ayu), favorites, custom lists, image support, encrypted storage, keyboard shortcuts, and more.",
     "version": 1,
     "shell-version": ["45", "46", "47", "48", "49"],
     "url": "https://github.com/sfnemis/ClipMaster",

@@ -537,10 +537,20 @@ class ClipboardMonitor {
         this._clipboard = St.Clipboard.get_default();
         this._selection = global.display.get_selection();
         this._lastContent = null;
+        this._lastPrimaryContent = null;
         this._lastImageHash = null;
+        this._lastPrimaryImageHash = null;
         this._timeoutId = null;
+        this._primaryTimeoutId = null;
         this._selectionOwnerChangedId = null;
+        this._primarySelectionOwnerChangedId = null;
+        this._primarySelectionSettingId = null;
         this._imageCheckProcess = null;
+        
+        // Grace period for PRIMARY selection on startup (to avoid capturing typing)
+        // During this period, we'll only update _lastPrimaryContent but not save to history
+        this._primaryGracePeriodEnd = 0; // Will be set when tracking starts
+        this._primaryGracePeriodMs = 5000; // 5 seconds grace period
         
         // Cache settings to avoid repeated lookups (MB converted to bytes)
         // Handle both old (bytes) and new (MB) settings keys for compatibility
@@ -591,11 +601,46 @@ class ClipboardMonitor {
     }
     
     start() {
-        // Monitor selection changes
+        // Monitor CLIPBOARD selection changes (Ctrl+C/V)
         this._selectionOwnerChangedId = this._selection.connect(
             'owner-changed',
             this._onSelectionOwnerChanged.bind(this)
         );
+        
+        // Monitor PRIMARY selection changes (middle mouse button) - only if enabled
+        if (this._settings.get_boolean('track-primary-selection')) {
+            // Set grace period end time (5 seconds from now)
+            this._primaryGracePeriodEnd = Date.now() + this._primaryGracePeriodMs;
+            debugLog(`Primary selection tracking enabled. Grace period until: ${new Date(this._primaryGracePeriodEnd).toISOString()}`);
+            
+            this._primarySelectionOwnerChangedId = this._selection.connect(
+                'owner-changed',
+                this._onPrimarySelectionOwnerChanged.bind(this)
+            );
+            // Initial check - but don't save during grace period
+            this._checkPrimaryClipboard(true); // true = isInitialCheck
+        }
+        
+        // Listen for settings changes
+        this._primarySelectionSettingId = this._settings.connect('changed::track-primary-selection', () => {
+            const enabled = this._settings.get_boolean('track-primary-selection');
+            if (enabled && !this._primarySelectionOwnerChangedId) {
+                // Enable primary selection tracking
+                // Set grace period end time (5 seconds from now)
+                this._primaryGracePeriodEnd = Date.now() + this._primaryGracePeriodMs;
+                debugLog(`Primary selection tracking enabled via settings. Grace period until: ${new Date(this._primaryGracePeriodEnd).toISOString()}`);
+                
+                this._primarySelectionOwnerChangedId = this._selection.connect(
+                    'owner-changed',
+                    this._onPrimarySelectionOwnerChanged.bind(this)
+                );
+                this._checkPrimaryClipboard(true); // true = isInitialCheck
+            } else if (!enabled && this._primarySelectionOwnerChangedId) {
+                // Disable primary selection tracking
+                this._selection.disconnect(this._primarySelectionOwnerChangedId);
+                this._primarySelectionOwnerChangedId = null;
+            }
+        });
         
         // Initial check
         this._checkClipboard();
@@ -607,14 +652,29 @@ class ClipboardMonitor {
             this._selectionOwnerChangedId = null;
         }
         
+        if (this._primarySelectionOwnerChangedId) {
+            this._selection.disconnect(this._primarySelectionOwnerChangedId);
+            this._primarySelectionOwnerChangedId = null;
+        }
+        
         if (this._settingsChangedId) {
             this._settings.disconnect(this._settingsChangedId);
             this._settingsChangedId = null;
         }
         
+        if (this._primarySelectionSettingId) {
+            this._settings.disconnect(this._primarySelectionSettingId);
+            this._primarySelectionSettingId = null;
+        }
+        
         if (this._timeoutId) {
             GLib.source_remove(this._timeoutId);
             this._timeoutId = null;
+        }
+        
+        if (this._primaryTimeoutId) {
+            GLib.source_remove(this._primaryTimeoutId);
+            this._primaryTimeoutId = null;
         }
         
         this._cancelImageCheck();
@@ -647,6 +707,22 @@ class ClipboardMonitor {
         }
     }
     
+    _onPrimarySelectionOwnerChanged(selection, selectionType, selectionSource) {
+        debugLog(`Primary selection owner changed, type=${selectionType}`);
+        if (selectionType === Meta.SelectionType.SELECTION_PRIMARY) {
+            debugLog(`Primary selection changed!`);
+            // Delay to let clipboard settle
+            if (this._primaryTimeoutId) {
+                GLib.source_remove(this._primaryTimeoutId);
+            }
+            this._primaryTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._checkPrimaryClipboard();
+                this._primaryTimeoutId = null;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+    }
+    
     _checkClipboard() {
         debugLog(`Checking clipboard...`);
         // Check for text
@@ -666,21 +742,68 @@ class ClipboardMonitor {
                 // New content - always process
                 debugLog(`NEW content detected, processing...`);
                 this._lastContent = text;
-                this._processText(text);
+                this._processText(text, 'CLIPBOARD');
             } else if (text && text === this._lastContent && !skipDuplicates) {
                 // Same content but skip-duplicates is OFF - process anyway
                 debugLog(`Same content but skip-duplicates=OFF, processing anyway...`);
-                this._processText(text);
+                this._processText(text, 'CLIPBOARD');
             } else if (!text && this._cachedSettings.trackImages) {
                 // No text, check for image
-                this._checkForImage();
+                this._checkForImage('CLIPBOARD');
             } else {
                 debugLog(`Same content or null, skipping (skipDuplicates=${skipDuplicates})`);
             }
         });
     }
     
-    _checkForImage() {
+    _checkPrimaryClipboard(isInitialCheck = false) {
+        debugLog(`Checking primary clipboard... (isInitialCheck=${isInitialCheck})`);
+        // Check for text from PRIMARY selection
+        this._clipboard.get_text(St.ClipboardType.PRIMARY, (clipboard, text) => {
+            debugLog(`Got text from primary: "${text ? text.substring(0, 50) : 'null'}"`);
+            debugLog(`Last primary content was: "${this._lastPrimaryContent ? this._lastPrimaryContent.substring(0, 50) : 'null'}"`);
+            
+            // Check if we're in grace period (first 5 seconds after extension start)
+            const now = Date.now();
+            const inGracePeriod = now < this._primaryGracePeriodEnd;
+            
+            if (inGracePeriod) {
+                debugLog(`In grace period (${Math.round((this._primaryGracePeriodEnd - now) / 1000)}s remaining). Updating lastPrimaryContent but NOT saving to history.`);
+                // During grace period, just update _lastPrimaryContent but don't save to history
+                // This prevents capturing typing during startup
+                if (text) {
+                    this._lastPrimaryContent = text;
+                }
+                return; // Don't process during grace period
+            }
+            
+            // Check skip-duplicates setting
+            let skipDuplicates = true;
+            try {
+                skipDuplicates = this._settings.get_boolean('skip-duplicates');
+            } catch (e) {
+                skipDuplicates = true;
+            }
+            
+            if (text && text !== this._lastPrimaryContent) {
+                // New content - always process
+                debugLog(`NEW primary content detected, processing...`);
+                this._lastPrimaryContent = text;
+                this._processText(text, 'PRIMARY');
+            } else if (text && text === this._lastPrimaryContent && !skipDuplicates) {
+                // Same content but skip-duplicates is OFF - process anyway
+                debugLog(`Same primary content but skip-duplicates=OFF, processing anyway...`);
+                this._processText(text, 'PRIMARY');
+            } else if (!text && this._cachedSettings.trackImages) {
+                // No text, check for image
+                this._checkForImage('PRIMARY');
+            } else {
+                debugLog(`Same primary content or null, skipping (skipDuplicates=${skipDuplicates})`);
+            }
+        });
+    }
+    
+    _checkForImage(selectionType = 'CLIPBOARD') {
         // Cancel any pending image check
         this._cancelImageCheck();
         
@@ -695,8 +818,9 @@ class ClipboardMonitor {
             checkCmd = ['wl-paste', '--list-types'];
             getCmd = ['wl-paste', '--type', 'image/png'];
         } else {
-            checkCmd = ['xclip', '-selection', 'clipboard', '-o', '-t', 'TARGETS'];
-            getCmd = ['xclip', '-selection', 'clipboard', '-o', '-t', 'image/png'];
+            const selection = selectionType === 'PRIMARY' ? 'primary' : 'clipboard';
+            checkCmd = ['xclip', '-selection', selection, '-o', '-t', 'TARGETS'];
+            getCmd = ['xclip', '-selection', selection, '-o', '-t', 'image/png'];
         }
         
         try {
@@ -715,7 +839,7 @@ class ClipboardMonitor {
                                    stdout.includes('image/jpeg') || 
                                    stdout.includes('image/gif'))) {
                         // Get the actual image data
-                        this._fetchImageFromClipboard(isWayland);
+                        this._fetchImageFromClipboard(isWayland, selectionType);
                     }
                 } catch (e) {
                     // Silently fail - clipboard tool might not be available
@@ -726,7 +850,7 @@ class ClipboardMonitor {
         }
     }
     
-    _fetchImageFromClipboard(isWayland) {
+    _fetchImageFromClipboard(isWayland, selectionType = 'CLIPBOARD') {
         const maxSize = this._cachedSettings.maxImageSize;
         
         // Create temp file for image
@@ -738,7 +862,8 @@ class ClipboardMonitor {
         if (isWayland) {
             getCmd = ['bash', '-c', `wl-paste --type image/png > "${tempPath}"`];
         } else {
-            getCmd = ['bash', '-c', `xclip -selection clipboard -o -t image/png > "${tempPath}"`];
+            const selection = selectionType === 'PRIMARY' ? 'primary' : 'clipboard';
+            getCmd = ['bash', '-c', `xclip -selection ${selection} -o -t image/png > "${tempPath}"`];
         }
         
         try {
@@ -767,8 +892,15 @@ class ClipboardMonitor {
                                 if (success) {
                                     const hash = this._hashImageData(contents);
                                     
-                                    if (hash !== this._lastImageHash) {
-                                        this._lastImageHash = hash;
+                                    const isPrimary = selectionType === 'PRIMARY';
+                                    const lastHash = isPrimary ? this._lastPrimaryImageHash : this._lastImageHash;
+                                    
+                                    if (hash !== lastHash) {
+                                        if (isPrimary) {
+                                            this._lastPrimaryImageHash = hash;
+                                        } else {
+                                            this._lastImageHash = hash;
+                                        }
                                         
                                         // Store image as base64
                                         const base64 = GLib.base64_encode(contents);
@@ -844,7 +976,7 @@ class ClipboardMonitor {
         return hash.toString(16);
     }
     
-    _processText(text) {
+    _processText(text, selectionType = 'CLIPBOARD') {
         if (!text || text.trim() === '') return;
         
         if (text.length > this._cachedSettings.maxItemSize) {
@@ -869,7 +1001,8 @@ class ClipboardMonitor {
             type: type,
             content: text,
             plainText: text,
-            preview: text.substring(0, 200).replace(/\n/g, ' ')
+            preview: text.substring(0, 200).replace(/\n/g, ' '),
+            sourceApp: selectionType === 'PRIMARY' ? 'PRIMARY' : null
         };
         
         const itemId = this._database.addItem(item);
@@ -888,34 +1021,56 @@ class ClipboardMonitor {
             text = text.replace(/<[^>]*>/g, '');
         }
         this._lastContent = text; // Prevent re-adding
+        // Always copy to CLIPBOARD
         this._clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
+        
+        // Also copy to PRIMARY selection if tracking is enabled
+        try {
+            if (this._settings.get_boolean('track-primary-selection')) {
+                this._clipboard.set_text(St.ClipboardType.PRIMARY, text);
+                this._lastPrimaryContent = text; // Prevent re-adding to PRIMARY
+            }
+        } catch (e) {
+            log(`ClipMaster: Error copying to PRIMARY selection: ${e.message}`);
+        }
     }
     
     copyImageToClipboard(imagePath) {
         // Use wl-copy/xclip to copy image back to clipboard
         const isWayland = GLib.getenv('XDG_SESSION_TYPE') === 'wayland';
         
-        let cmd;
-        if (isWayland) {
-            cmd = ['wl-copy', '--type', 'image/png'];
-        } else {
-            cmd = ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i', imagePath];
-        }
-        
         try {
             if (isWayland) {
-                // wl-copy reads from stdin
-                const proc = Gio.Subprocess.new(
+                // wl-copy reads from stdin - copy to CLIPBOARD
+                const procClipboard = Gio.Subprocess.new(
                     ['bash', '-c', `cat "${imagePath}" | wl-copy --type image/png`],
                     Gio.SubprocessFlags.NONE
                 );
-                proc.wait_async(null, null);
+                procClipboard.wait_async(null, null);
+                
+                // Note: wl-copy doesn't support PRIMARY selection directly
+                // PRIMARY selection for images in Wayland is limited
+                // We'll copy to CLIPBOARD and user can use Ctrl+V
             } else {
-                const proc = Gio.Subprocess.new(
-                    cmd,
+                // X11 - copy to CLIPBOARD
+                const procClipboard = Gio.Subprocess.new(
+                    ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i', imagePath],
                     Gio.SubprocessFlags.NONE
                 );
-                proc.wait_async(null, null);
+                procClipboard.wait_async(null, null);
+                
+                // Also copy to PRIMARY selection if tracking is enabled
+                try {
+                    if (this._settings.get_boolean('track-primary-selection')) {
+                        const procPrimary = Gio.Subprocess.new(
+                            ['xclip', '-selection', 'primary', '-t', 'image/png', '-i', imagePath],
+                            Gio.SubprocessFlags.NONE
+                        );
+                        procPrimary.wait_async(null, null);
+                    }
+                } catch (e) {
+                    log(`ClipMaster: Error copying image to PRIMARY selection: ${e.message}`);
+                }
             }
         } catch (e) {
             log(`ClipMaster: Error copying image to clipboard: ${e.message}`);
@@ -956,6 +1111,9 @@ class ClipboardPopup extends St.BoxLayout {
         this._plainTextMode = false;
         this._isPinned = false;  // Pin state - keeps popup open on outside click
         this._isShowing = false;  // Track if popup is intentionally shown
+        this._showTime = 0;  // Track when popup was shown (for grace period)
+        this._pasteFromHover = false;  // Track if paste came from hover (paste-on-select)
+        this._customStylesheet = null;  // Track custom theme stylesheet
         
         // Drag state
         this._dragging = false;
@@ -974,6 +1132,12 @@ class ClipboardPopup extends St.BoxLayout {
         this._themeChangedId = this._settings.connect('changed::dark-theme', () => {
             this._applyTheme();
         });
+        this._themeNameChangedId = this._settings.connect('changed::theme', () => {
+            this._applyTheme();
+        });
+        this._customThemeChangedId = this._settings.connect('changed::custom-theme-path', () => {
+            this._applyTheme();
+        });
         
         this._buildUI();
         this._connectSignals();
@@ -981,10 +1145,63 @@ class ClipboardPopup extends St.BoxLayout {
     
     _applyTheme() {
         try {
-            const isDark = this._settings.get_boolean('dark-theme');
-            if (isDark) {
-                this.remove_style_class_name('light');
+            // Remove all theme classes
+            this.remove_style_class_name('light');
+            this.remove_style_class_name('theme-catppuccin');
+            this.remove_style_class_name('theme-dracula');
+            this.remove_style_class_name('theme-nord');
+            this.remove_style_class_name('theme-gruvbox');
+            this.remove_style_class_name('theme-onedark');
+            this.remove_style_class_name('theme-adwaita');
+            this.remove_style_class_name('theme-monokai');
+            this.remove_style_class_name('theme-solarized');
+            this.remove_style_class_name('theme-tokyonight');
+            this.remove_style_class_name('theme-rosepine');
+            this.remove_style_class_name('theme-material');
+            this.remove_style_class_name('theme-ayu');
+            
+            // Check for custom theme
+            const customThemePath = this._settings.get_string('custom-theme-path') || '';
+            if (customThemePath) {
+                // Load custom theme
+                const customFile = Gio.File.new_for_path(customThemePath);
+                if (customFile.query_exists(null)) {
+                    try {
+                        // Unload previous custom theme if any
+                        if (this._customStylesheet) {
+                            const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
+                            theme.unload_stylesheet(this._customStylesheet);
+                        }
+                        // Load new custom theme
+                        const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
+                        theme.load_stylesheet(customFile);
+                        this._customStylesheet = customFile;
+                    } catch (e) {
+                        log(`ClipMaster: Error loading custom theme: ${e.message}`);
+                    }
+                }
             } else {
+                // Unload custom theme if cleared
+                if (this._customStylesheet) {
+                    try {
+                        const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
+                        theme.unload_stylesheet(this._customStylesheet);
+                        this._customStylesheet = null;
+                    } catch (e) {
+                        log(`ClipMaster: Error unloading custom theme: ${e.message}`);
+                    }
+                }
+            }
+            
+            // Apply selected theme (only if no custom theme)
+            if (!customThemePath) {
+                const themeName = this._settings.get_string('theme') || 'gruvbox';
+                this.add_style_class_name(`theme-${themeName}`);
+            }
+            
+            // Also apply light/dark based on dark-theme setting (for backward compatibility)
+            const isDark = this._settings.get_boolean('dark-theme');
+            if (!isDark) {
                 this.add_style_class_name('light');
             }
         } catch (e) {
@@ -1053,8 +1270,10 @@ class ClipboardPopup extends St.BoxLayout {
             this._isPinned = !this._isPinned;
             if (this._isPinned) {
                 this._pinButton.add_style_pseudo_class('checked');
+                debugLog(`Pin ENABLED - popup will stay open`);
             } else {
                 this._pinButton.remove_style_pseudo_class('checked');
+                debugLog(`Pin DISABLED - popup will close on outside click`);
             }
             debugLog(`Pin toggled: ${this._isPinned}`);
             return Clutter.EVENT_STOP;
@@ -1062,7 +1281,7 @@ class ClipboardPopup extends St.BoxLayout {
         this._header.add_child(this._pinButton);
         
         // Add List button
-        const addListButton = new St.Button({
+        this._addListButton = new St.Button({
             style_class: 'clipmaster-toggle-button',
             child: new St.Icon({
                 icon_name: 'list-add-symbolic',
@@ -1070,11 +1289,17 @@ class ClipboardPopup extends St.BoxLayout {
             }),
             can_focus: false
         });
-        addListButton.connect('clicked', () => {
+        this._addListButton.connect('button-press-event', () => {
+            debugLog('Add list button pressed');
             this._showCreateListDialog();
             return Clutter.EVENT_STOP;
         });
-        this._header.add_child(addListButton);
+        this._addListButton.connect('clicked', () => {
+            debugLog('Add list button clicked');
+            this._showCreateListDialog();
+            return Clutter.EVENT_STOP;
+        });
+        this._header.add_child(this._addListButton);
         
         // Close button - CRITICAL: must stop event propagation
         this._closeButton = new St.Button({
@@ -1086,10 +1311,12 @@ class ClipboardPopup extends St.BoxLayout {
             can_focus: false  // Prevent focus stealing
         });
         this._closeButton.connect('button-press-event', () => {
+            debugLog('Close button pressed');
             this._extension.hidePopup();
             return Clutter.EVENT_STOP;
         });
         this._closeButton.connect('clicked', () => {
+            debugLog('Close button clicked');
             this._extension.hidePopup();
             return Clutter.EVENT_STOP;
         });
@@ -1119,11 +1346,11 @@ class ClipboardPopup extends St.BoxLayout {
                 if (source === this._closeButton || 
                     source === this._pinButton ||
                     source === this._plainTextButton ||
-                    source === addListButton ||
+                    source === this._addListButton ||
                     parent === this._closeButton ||
                     parent === this._pinButton ||
                     parent === this._plainTextButton ||
-                    parent === addListButton) {
+                    parent === this._addListButton) {
                     debugLog(`Clicked on button, not starting drag`);
                     return Clutter.EVENT_PROPAGATE;
                 }
@@ -1239,42 +1466,58 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     _showCreateListDialog() {
-        const dialog = new ModalDialog.ModalDialog({ styleClass: 'clipmaster-dialog' });
-        
-        const label = new St.Label({
-            text: _('Create New List'),
-            style_class: 'clipmaster-dialog-title'
-        });
-        dialog.contentLayout.add_child(label);
-        
-        const entry = new St.Entry({
-            style_class: 'clipmaster-dialog-entry',
-            hint_text: _('List name...'),
-            can_focus: true
-        });
-        dialog.contentLayout.add_child(entry);
-        
-        dialog.addButton({
-            label: _('Cancel'),
-            action: () => dialog.close(),
-            key: Clutter.KEY_Escape
-        });
-        
-        dialog.addButton({
-            label: _('Create'),
-            action: () => {
-                const name = entry.get_text().trim();
-                if (name) {
-                    this._database.createList(name);
-                    this._loadItems();
-                }
-                dialog.close();
-            },
-            default: true
-        });
-        
-        dialog.open();
-        entry.grab_key_focus();
+        debugLog('_showCreateListDialog called');
+        try {
+            const dialog = new ModalDialog.ModalDialog({ styleClass: 'clipmaster-dialog' });
+            
+            const label = new St.Label({
+                text: _('Create New List'),
+                style_class: 'clipmaster-dialog-title'
+            });
+            dialog.contentLayout.add_child(label);
+            
+            const entry = new St.Entry({
+                style_class: 'clipmaster-dialog-entry',
+                hint_text: _('List name...'),
+                can_focus: true
+            });
+            dialog.contentLayout.add_child(entry);
+            
+            dialog.addButton({
+                label: _('Cancel'),
+                action: () => {
+                    debugLog('Dialog cancelled');
+                    dialog.close();
+                },
+                key: Clutter.KEY_Escape
+            });
+            
+            dialog.addButton({
+                label: _('Create'),
+                action: () => {
+                    const name = entry.get_text().trim();
+                    debugLog(`Creating list with name: ${name}`);
+                    if (name) {
+                        const listId = this._database.createList(name);
+                        debugLog(`List created with ID: ${listId}`);
+                        this._loadItems();
+                        Main.notify('ClipMaster', _('List created successfully'));
+                    } else {
+                        debugLog('List name is empty');
+                    }
+                    dialog.close();
+                },
+                default: true
+            });
+            
+            debugLog('Opening dialog...');
+            dialog.open();
+            entry.grab_key_focus();
+        } catch (e) {
+            log(`ClipMaster: Error showing create list dialog: ${e.message}`);
+            debugLog(`Dialog error: ${e.message}`);
+            Main.notify('ClipMaster', _('Error creating list dialog'));
+        }
     }
     
     _showListsMenu() {
@@ -1289,9 +1532,32 @@ class ClipboardPopup extends St.BoxLayout {
         const menu = new PopupMenu.PopupMenu(this._listsButton, 0.0, St.Side.TOP);
         
         lists.forEach(list => {
-            menu.addAction(list.name, () => {
+            // Create a menu item with delete button
+            const menuItem = new PopupMenu.PopupMenuItem(list.name);
+            menuItem.connect('activate', () => {
                 this._setFilter(list.id);
             });
+            
+            // Add delete button
+            const deleteButton = new St.Button({
+                style_class: 'clipmaster-list-delete-button',
+                child: new St.Icon({
+                    icon_name: 'edit-delete-symbolic',
+                    icon_size: 14
+                }),
+                can_focus: false
+            });
+            deleteButton.connect('clicked', () => {
+                debugLog(`Deleting list: ${list.name} (ID: ${list.id})`);
+                this._database.deleteList(list.id);
+                this._loadItems();
+                menu.close();
+                Main.notify('ClipMaster', _('List deleted'));
+                return Clutter.EVENT_STOP;
+            });
+            
+            menuItem.add_child(deleteButton);
+            menu.addMenuItem(menuItem);
         });
         
         Main.uiGroup.add_child(menu.actor);
@@ -1386,10 +1652,29 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     _setupClickOutside() {
-        if (this._clickOutsideId) return;
+        // Remove existing handler first
+        if (this._clickOutsideId) {
+            debugLog('Removing existing click outside handler');
+            try {
+                global.stage.disconnect(this._clickOutsideId);
+            } catch (e) {
+                debugLog(`Error removing handler: ${e.message}`);
+            }
+            this._clickOutsideId = null;
+        }
         
+        debugLog('Setting up click outside handler');
         this._clickOutsideId = global.stage.connect('button-press-event', (actor, event) => {
-            if (!this.visible) return Clutter.EVENT_PROPAGATE;
+            if (!this.visible || !this._isShowing) {
+                return Clutter.EVENT_PROPAGATE;
+            }
+            
+            // Grace period: ignore clicks within 1000ms of showing popup (increased)
+            const timeSinceShow = Date.now() - this._showTime;
+            if (timeSinceShow < 1000) {
+                debugLog(`Ignoring click during grace period (${timeSinceShow}ms since show)`);
+                return Clutter.EVENT_PROPAGATE;
+            }
             
             // If pinned, don't close on outside click
             if (this._isPinned) {
@@ -1399,22 +1684,27 @@ class ClipboardPopup extends St.BoxLayout {
             
             try {
                 const [clickX, clickY] = event.get_coords();
-                const [popupX, popupY] = this.get_transformed_position();
+                const [popupX, popupY] = this.get_position();
                 const [popupW, popupH] = this.get_size();
+                
+                debugLog(`Click at (${clickX}, ${clickY}), popup at (${popupX}, ${popupY}), size (${popupW}, ${popupH})`);
                 
                 // Check if click is INSIDE popup - if so, let it through
                 const isInside = clickX >= popupX && clickX <= popupX + popupW &&
                                  clickY >= popupY && clickY <= popupY + popupH;
                 
                 if (isInside) {
+                    debugLog('Click is inside popup, allowing');
                     // Click is inside popup, let it propagate to popup elements
                     return Clutter.EVENT_PROPAGATE;
                 } else {
+                    debugLog('Click is outside popup, closing');
                     // Click is outside popup, close it
                     this._extension.hidePopup();
-                    return Clutter.EVENT_PROPAGATE;
+                    return Clutter.EVENT_STOP;  // Stop propagation to prevent other handlers
                 }
             } catch (e) {
+                debugLog(`Click outside error: ${e.message}`);
                 return Clutter.EVENT_PROPAGATE;
             }
         });
@@ -1464,23 +1754,39 @@ class ClipboardPopup extends St.BoxLayout {
         this.visible = true;
         this.opacity = 255;
         this.reactive = true;
+        this._showTime = Date.now();  // Record show time for grace period
         
-        // Setup click outside handler after popup is visible
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+        debugLog(`Popup shown at ${this._showTime}`);
+        
+        // Setup click outside handler after popup is visible (longer delay to prevent immediate closing)
+        // Use longer delay to ensure popup is fully rendered and user has time to see it
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 800, () => {
             if (this._isShowing && this.visible) {
+                debugLog('Setting up click outside handler after 800ms delay');
                 this._setupClickOutside();
                 this.grab_key_focus();
+            } else {
+                debugLog(`Not setting up click outside - isShowing=${this._isShowing}, visible=${this.visible}`);
             }
             return GLib.SOURCE_REMOVE;
         });
     }
     
     hide() {
+        debugLog(`hide() called - _isPinned=${this._isPinned}, _isShowing=${this._isShowing}`);
+        
+        // If pinned, don't hide
+        if (this._isPinned) {
+            debugLog('Popup is pinned, not hiding');
+            return;
+        }
+        
         this._isShowing = false;
         this._removeModalOverlay();  // This also removes click outside handler
         this.visible = false;
         this.opacity = 0;  // Make fully transparent
         this.reactive = false;
+        debugLog('Popup hidden');
     }
     
     destroy() {
@@ -1490,6 +1796,25 @@ class ClipboardPopup extends St.BoxLayout {
         if (this._themeChangedId) {
             this._settings.disconnect(this._themeChangedId);
             this._themeChangedId = null;
+        }
+        if (this._themeNameChangedId) {
+            this._settings.disconnect(this._themeNameChangedId);
+            this._themeNameChangedId = null;
+        }
+        if (this._customThemeChangedId) {
+            this._settings.disconnect(this._customThemeChangedId);
+            this._customThemeChangedId = null;
+        }
+        
+        // Unload custom stylesheet if any
+        if (this._customStylesheet) {
+            try {
+                const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
+                theme.unload_stylesheet(this._customStylesheet);
+                this._customStylesheet = null;
+            } catch (e) {
+                log(`ClipMaster: Error unloading custom theme on destroy: ${e.message}`);
+            }
         }
         
         super.destroy();
@@ -1541,19 +1866,94 @@ class ClipboardPopup extends St.BoxLayout {
         
         // Connect click
         row.connect('button-press-event', (actor, event) => {
+            debugLog(`Row ${index} button-press-event, button=${event.get_button()}`);
             if (event.get_button() === 1) {
+                // Cancel any pending hover paste timeout
+                if (row._pasteTimeoutId) {
+                    debugLog(`Cancelling paste timeout for item ${index} (user clicked)`);
+                    GLib.source_remove(row._pasteTimeoutId);
+                    row._pasteTimeoutId = null;
+                }
+                
+                // Single click - select and paste
                 this._selectedIndex = index;
+                this._updateSelection();
+                debugLog(`Single click on row ${index}, selecting and pasting...`);
+                // Paste selected item (not from hover, so popup will close if close-on-paste is enabled)
+                this._pasteFromHover = false;
                 this._pasteSelected();
+                return Clutter.EVENT_STOP;
             } else if (event.get_button() === 3) {
+                // Right click - show context menu
+                this._selectedIndex = index;
+                this._updateSelection();
                 this._showContextMenu(item, row);
+                return Clutter.EVENT_STOP;
             }
-            return Clutter.EVENT_STOP;
+            return Clutter.EVENT_PROPAGATE;
         });
         
-        // Hover
-        row.connect('enter-event', () => {
+        // Hover - Paste on selection
+        row.connect('enter-event', (actor, event) => {
+            debugLog(`ENTER EVENT on row ${index}`);
             this._selectedIndex = index;
             this._updateSelection();
+            
+            // Paste on selection if enabled
+            let pasteOnSelect = false;
+            try {
+                pasteOnSelect = this._settings.get_boolean('paste-on-select');
+            } catch (e) {
+                debugLog(`Error reading paste-on-select: ${e.message}`);
+            }
+            
+            debugLog(`Hover on item ${index}, paste-on-select=${pasteOnSelect}, visible=${this.visible}, isShowing=${this._isShowing}`);
+            
+            if (pasteOnSelect) {
+                // Store timeout ID to cancel if user moves away
+                if (row._pasteTimeoutId) {
+                    debugLog(`Cancelling existing paste timeout for row ${index}`);
+                    GLib.source_remove(row._pasteTimeoutId);
+                    row._pasteTimeoutId = null;
+                }
+                
+                debugLog(`Setting up paste timeout for row ${index} (500ms delay)`);
+                // Small delay to prevent accidental pastes while navigating
+                row._pasteTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                    debugLog(`Paste timeout fired for row ${index} - checking conditions...`);
+                    debugLog(`  selectedIndex=${this._selectedIndex}, index=${index}, visible=${this.visible}, isShowing=${this._isShowing}`);
+                    
+                    // Only paste if still on the same item and popup is visible
+                    if (this._selectedIndex === index && this.visible && this._isShowing) {
+                        debugLog(`✓ Conditions met - PASTING item ${index} (from paste-on-select hover)`);
+                        // Mark that this is from paste-on-select (not explicit click)
+                        this._pasteFromHover = true;
+                        // Paste to clipboard
+                        this._pasteSelected();
+                        // Reset after a short delay
+                        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                            this._pasteFromHover = false;
+                            return GLib.SOURCE_REMOVE;
+                        });
+                    } else {
+                        debugLog(`✗ Conditions NOT met - NOT pasting`);
+                    }
+                    row._pasteTimeoutId = null;
+                    return GLib.SOURCE_REMOVE;
+                });
+            } else {
+                debugLog(`Paste on select is DISABLED, not setting timeout`);
+            }
+        });
+        
+        // Cancel paste timeout if user leaves the row
+        row.connect('leave-event', (actor, event) => {
+            debugLog(`LEAVE EVENT on row ${index}`);
+            if (row._pasteTimeoutId) {
+                debugLog(`Cancelling paste timeout for item ${index} (user left row)`);
+                GLib.source_remove(row._pasteTimeoutId);
+                row._pasteTimeoutId = null;
+            }
         });
         
         // Number badge for quick access (1-9)
@@ -1574,6 +1974,7 @@ class ClipboardPopup extends St.BoxLayout {
             try {
                 const file = Gio.File.new_for_path(item.content);
                 if (file.query_exists(null)) {
+                    // Use file icon as thumbnail (shows image preview)
                     const gicon = new Gio.FileIcon({ file: file });
                     const thumbnail = new St.Icon({
                         gicon: gicon,
@@ -1581,7 +1982,9 @@ class ClipboardPopup extends St.BoxLayout {
                         style_class: 'clipmaster-item-thumbnail'
                     });
                     row.add_child(thumbnail);
+                    debugLog(`Image thumbnail added for: ${item.content}`);
                 } else {
+                    debugLog(`Image file not found: ${item.content}`);
                     // Fallback to icon
                     const icon = new St.Icon({
                         icon_name: 'image-x-generic-symbolic',
@@ -1591,6 +1994,7 @@ class ClipboardPopup extends St.BoxLayout {
                     row.add_child(icon);
                 }
             } catch (e) {
+                debugLog(`Image thumbnail error: ${e.message}`);
                 // Fallback to icon
                 const icon = new St.Icon({
                     icon_name: 'image-x-generic-symbolic',
@@ -1651,17 +2055,75 @@ class ClipboardPopup extends St.BoxLayout {
         previewLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         contentBox.add_child(previewLabel);
         
+        // Date/time display
+        if (item.created) {
+            const date = new Date(item.created);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+            
+            let timeText = '';
+            if (diffMins < 1) {
+                timeText = _('Just now');
+            } else if (diffMins < 60) {
+                timeText = `${diffMins} ${diffMins === 1 ? _('min') : _('mins')} ago`;
+            } else if (diffHours < 24) {
+                timeText = `${diffHours} ${diffHours === 1 ? _('hour') : _('hours')} ago`;
+            } else if (diffDays < 7) {
+                timeText = `${diffDays} ${diffDays === 1 ? _('day') : _('days')} ago`;
+            } else {
+                // Show date
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+                const hours = String(date.getHours()).padStart(2, '0');
+                const mins = String(date.getMinutes()).padStart(2, '0');
+                timeText = `${day}.${month}.${year} ${hours}:${mins}`;
+            }
+            
+            const timeLabel = new St.Label({
+                text: timeText,
+                style_class: 'clipmaster-item-time',
+                x_expand: true,
+                x_align: Clutter.ActorAlign.START
+            });
+            contentBox.add_child(timeLabel);
+        }
+        
         row.add_child(contentBox);
         
-        // Favorite indicator
-        if (item.isFavorite) {
-            const favIcon = new St.Icon({
-                icon_name: 'starred-symbolic',
-                icon_size: 12,
-                style_class: 'clipmaster-item-fav'
-            });
-            row.add_child(favIcon);
-        }
+        // Favorite button (always visible, shows state)
+        const favButton = new St.Button({
+            style_class: 'clipmaster-fav-button',
+            can_focus: false,
+            reactive: true,
+            track_hover: true
+        });
+        
+        const favIcon = new St.Icon({
+            icon_name: item.isFavorite ? 'starred-symbolic' : 'non-starred-symbolic',
+            icon_size: 16,
+            style_class: item.isFavorite ? 'clipmaster-item-fav' : 'clipmaster-item-fav-inactive'
+        });
+        favButton.set_child(favIcon);
+        
+        favButton.connect('button-press-event', (actor, event) => {
+            if (event.get_button() === 1) {
+                // Toggle favorite
+                const newFavoriteState = this._database.toggleFavorite(item.id);
+                // Update icon
+                favIcon.icon_name = newFavoriteState ? 'starred-symbolic' : 'non-starred-symbolic';
+                favIcon.style_class = newFavoriteState ? 'clipmaster-item-fav' : 'clipmaster-item-fav-inactive';
+                // Reload items to reflect changes
+                this._loadItems();
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        
+        row.add_child(favButton);
         
         return row;
     }
@@ -1692,17 +2154,25 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     _pasteSelected() {
+        debugLog(`=== _pasteSelected() CALLED ===`);
+        debugLog(`Items length: ${this._items.length}, selectedIndex: ${this._selectedIndex}`);
+        
         if (this._items.length === 0 || this._selectedIndex >= this._items.length) {
+            debugLog(`✗ _pasteSelected: No items or invalid index (${this._selectedIndex}/${this._items.length})`);
             return;
         }
         
         const item = this._items[this._selectedIndex];
+        debugLog(`✓ _pasteSelected: Pasting item ${item.id} (type: ${item.type})`);
+        debugLog(`  Item preview: ${item.preview ? item.preview.substring(0, 50) : 'no preview'}`);
         
         // Handle image items differently
         if (item.type === ItemType.IMAGE && item.content) {
+            debugLog(`Copying image to clipboard: ${item.content}`);
             this._monitor.copyImageToClipboard(item.content);
         } else {
             const content = this._plainTextMode ? item.plainText : item.content;
+            debugLog(`Copying text to clipboard (plainText=${this._plainTextMode}): ${content ? content.substring(0, 50) : 'null'}...`);
             this._monitor.copyToClipboard(content, this._plainTextMode);
         }
         
@@ -1712,9 +2182,26 @@ class ClipboardPopup extends St.BoxLayout {
             useCount: (item.useCount || 1) + 1
         });
         
-        if (this._settings.get_boolean('close-on-paste')) {
-            this._extension.hidePopup();
+        let closeOnPaste = false;
+        try {
+            closeOnPaste = this._settings.get_boolean('close-on-paste');
+        } catch (e) {
+            debugLog(`Error reading close-on-paste: ${e.message}`);
         }
+        
+        const isFromHover = this._pasteFromHover || false;
+        debugLog(`close-on-paste=${closeOnPaste}, _isPinned=${this._isPinned}, isFromHover=${isFromHover}`);
+        
+        // Don't close if paste came from hover (paste-on-select)
+        // Only close if user explicitly clicked AND close-on-paste is enabled AND popup is not pinned
+        if (closeOnPaste && !this._isPinned && !isFromHover) {
+            debugLog(`Closing popup after paste (close-on-paste=true, not pinned, explicit click)`);
+            this._extension.hidePopup();
+        } else {
+            debugLog(`NOT closing popup (close-on-paste=${closeOnPaste}, pinned=${this._isPinned}, isFromHover=${isFromHover})`);
+        }
+        
+        debugLog(`=== _pasteSelected() COMPLETED ===`);
     }
     
     _showContextMenu(item, row) {
@@ -2202,12 +2689,31 @@ export default class ClipMasterExtension extends Extension {
     }
     
     showPopup() {
-        if (!this._popup) return;
+        if (!this._popup) {
+            debugLog('showPopup: No popup available');
+            return;
+        }
         
         // Prevent showing if already showing
-        if (this._popup._isShowing) return;
+        if (this._popup._isShowing) {
+            debugLog('showPopup: Already showing, ignoring');
+            return;
+        }
+        
+        debugLog('showPopup: Starting to show popup');
         
         try {
+            // Remove any existing click outside handler first
+            if (this._popup._clickOutsideId) {
+                debugLog('showPopup: Removing existing click outside handler');
+                try {
+                    global.stage.disconnect(this._popup._clickOutsideId);
+                } catch (e) {
+                    debugLog(`Error removing handler: ${e.message}`);
+                }
+                this._popup._clickOutsideId = null;
+            }
+            
             // Mark as intentionally showing
             this._popup._isShowing = true;
             
@@ -2270,24 +2776,42 @@ export default class ClipMasterExtension extends Extension {
             this._popup.set_position(Math.round(posX), Math.round(posY));
             
             // Now show
+            debugLog(`showPopup: Calling popup.show() at position (${posX}, ${posY})`);
             this._popup.show();
+            debugLog('showPopup: Popup.show() completed');
         } catch (e) {
             log(`ClipMaster: Error showing popup: ${e.message}`);
+            debugLog(`showPopup: Error - ${e.message}`);
             this._popup._isShowing = false;
         }
     }
     
     hidePopup() {
+        debugLog('hidePopup: Called');
         if (this._popup) {
+            debugLog(`hidePopup: _isShowing=${this._popup._isShowing}, visible=${this._popup.visible}, _isPinned=${this._popup._isPinned}`);
+            
+            // If pinned, don't hide
+            if (this._popup._isPinned) {
+                debugLog('hidePopup: Popup is pinned, not hiding');
+                return;
+            }
+            
             this._popup._isShowing = false;
             this._popup.hide();
+            debugLog('hidePopup: Popup hidden');
+        } else {
+            debugLog('hidePopup: No popup available');
         }
     }
     
     togglePopup() {
+        debugLog(`togglePopup: _isShowing=${this._popup ? this._popup._isShowing : 'no popup'}`);
         if (this._popup && this._popup._isShowing) {
+            debugLog('togglePopup: Hiding popup');
             this.hidePopup();
         } else {
+            debugLog('togglePopup: Showing popup');
             this.showPopup();
         }
     }

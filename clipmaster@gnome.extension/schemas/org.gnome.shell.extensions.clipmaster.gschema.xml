@@ -57,6 +57,12 @@
       <description>Whether to track file copies in clipboard history</description>
     </key>
     
+    <key name="track-primary-selection" type="b">
+      <default>true</default>
+      <summary>Track Primary Selection</summary>
+      <description>Track PRIMARY selection (middle mouse button paste). Options: true=both, false=CLIPBOARD only</description>
+    </key>
+    
     <key name="strip-whitespace" type="b">
       <default>false</default>
       <summary>Strip whitespace</summary>
@@ -161,6 +167,18 @@
       <default>true</default>
       <summary>Dark theme</summary>
       <description>Use dark theme for popup (false for light theme)</description>
+    </key>
+    
+    <key name="theme" type="s">
+      <default>'gruvbox'</default>
+      <summary>Theme</summary>
+      <description>Visual theme for the popup. Options: catppuccin, dracula, nord, gruvbox, onedark, adwaita, monokai, solarized, tokyonight, rosepine, material, ayu</description>
+    </key>
+    
+    <key name="custom-theme-path" type="s">
+      <default>''</default>
+      <summary>Custom theme CSS file path</summary>
+      <description>Path to a custom CSS file for theme customization. Leave empty to use built-in themes.</description>
     </key>
     
     <!-- Security Settings -->

@@ -119,6 +119,14 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
         settings.bind('track-files', trackFilesRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         contentGroup.add(trackFilesRow);
         
+        // Track primary selection
+        const trackPrimaryRow = new Adw.SwitchRow({
+            title: _('Track Primary Selection'),
+            subtitle: _('Track PRIMARY selection (middle mouse button). When enabled, tracks both CLIPBOARD and PRIMARY. When disabled, only tracks CLIPBOARD (Ctrl+C/V).')
+        });
+        settings.bind('track-primary-selection', trackPrimaryRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        contentGroup.add(trackPrimaryRow);
+        
         // Strip whitespace
         const stripWhitespaceRow = new Adw.SwitchRow({
             title: _('Strip Whitespace'),
@@ -215,7 +223,123 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
         });
         behaviorPage.add(appearanceGroup);
         
-        // Dark theme toggle
+        // Theme selection
+        const themeRow = new Adw.ComboRow({
+            title: _('Theme'),
+            subtitle: _('Choose a visual theme for the popup')
+        });
+        const themeModel = new Gtk.StringList();
+        themeModel.append('Catppuccin');
+        themeModel.append('Dracula');
+        themeModel.append('Nord');
+        themeModel.append('Gruvbox');
+        themeModel.append('One Dark');
+        themeModel.append('Adwaita');
+        themeModel.append('Monokai');
+        themeModel.append('Solarized Dark');
+        themeModel.append('Tokyo Night');
+        themeModel.append('Rose Pine');
+        themeModel.append('Material Dark');
+        themeModel.append('Ayu');
+        themeRow.model = themeModel;
+        
+        // Bind theme setting (convert between display name and internal name)
+        const themeMap = {
+            'catppuccin': 0,
+            'dracula': 1,
+            'nord': 2,
+            'gruvbox': 3,
+            'onedark': 4,
+            'adwaita': 5,
+            'monokai': 6,
+            'solarized': 7,
+            'tokyonight': 8,
+            'rosepine': 9,
+            'material': 10,
+            'ayu': 11
+        };
+        const reverseThemeMap = ['catppuccin', 'dracula', 'nord', 'gruvbox', 'onedark', 'adwaita', 'monokai', 'solarized', 'tokyonight', 'rosepine', 'material', 'ayu'];
+        
+        // Set initial selection
+        const currentTheme = settings.get_string('theme') || 'gruvbox';
+        themeRow.selected = themeMap[currentTheme] !== undefined ? themeMap[currentTheme] : themeMap['gruvbox'];
+        
+        // Connect change handler
+        themeRow.connect('notify::selected', () => {
+            const selectedIndex = themeRow.selected;
+            const themeValue = reverseThemeMap[selectedIndex] || 'gruvbox';
+            settings.set_string('theme', themeValue);
+        });
+        
+        appearanceGroup.add(themeRow);
+        
+        // Custom theme file selector
+        const customThemeRow = new Adw.ActionRow({
+            title: _('Custom Theme'),
+            subtitle: _('Load a custom CSS theme file')
+        });
+        
+        const customThemeButton = new Gtk.Button({
+            label: _('Select CSS File'),
+            valign: Gtk.Align.CENTER
+        });
+        
+        const currentCustomTheme = settings.get_string('custom-theme-path') || '';
+        if (currentCustomTheme) {
+            customThemeRow.subtitle = currentCustomTheme;
+        }
+        
+        customThemeButton.connect('clicked', () => {
+            const fileDialog = new Gtk.FileDialog();
+            fileDialog.set_title(_('Select Custom Theme CSS File'));
+            
+            // Create filter for CSS files
+            const filter = new Gtk.FileFilter();
+            filter.set_name(_('CSS Files'));
+            filter.add_pattern('*.css');
+            fileDialog.set_default_filter(filter);
+            
+            fileDialog.open(null, null, (dialog, result) => {
+                try {
+                    const file = dialog.open_finish(result);
+                    if (file) {
+                        const path = file.get_path();
+                        settings.set_string('custom-theme-path', path);
+                        customThemeRow.subtitle = path;
+                    }
+                } catch (e) {
+                    // User cancelled
+                }
+            });
+        });
+        
+        customThemeRow.add_suffix(customThemeButton);
+        customThemeRow.activatable_widget = customThemeButton;
+        appearanceGroup.add(customThemeRow);
+        
+        // Clear custom theme button
+        if (currentCustomTheme) {
+            const clearThemeButton = new Gtk.Button({
+                label: _('Clear Custom Theme'),
+                valign: Gtk.Align.CENTER,
+                css_classes: ['destructive-action']
+            });
+            
+            clearThemeButton.connect('clicked', () => {
+                settings.set_string('custom-theme-path', '');
+                customThemeRow.subtitle = _('Load a custom CSS theme file');
+            });
+            
+            const clearThemeRow = new Adw.ActionRow({
+                title: _('Clear Custom Theme'),
+                subtitle: _('Remove custom theme and use built-in theme')
+            });
+            clearThemeRow.add_suffix(clearThemeButton);
+            clearThemeRow.activatable_widget = clearThemeButton;
+            appearanceGroup.add(clearThemeRow);
+        }
+        
+        // Dark theme toggle (for backward compatibility)
         const darkThemeRow = new Adw.SwitchRow({
             title: _('Dark Theme'),
             subtitle: _('Use dark theme (disable for light theme)')
@@ -720,27 +844,74 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
         
         dialog.connect('response', (dialog, response) => {
             if (response === 'clear') {
-                // Clear the database
-                const storagePath = settings.get_string('storage-path') || 
-                    GLib.build_filenamev([GLib.get_user_data_dir(), 'clipmaster', 'clipboard.json']);
-                
                 try {
+                    // Direct file manipulation (prefs window runs in separate process)
+                    const storagePath = settings.get_string('storage-path') || 
+                        GLib.build_filenamev([GLib.get_user_data_dir(), 'clipmaster', 'clipboard.json']);
+                    
                     const file = Gio.File.new_for_path(storagePath);
-                    if (file.query_exists(null)) {
-                        const [success, contents] = file.load_contents(null);
-                        if (success) {
-                            const data = JSON.parse(new TextDecoder().decode(contents));
-                            data.items = (data.items || []).filter(i => i.isFavorite);
-                            file.replace_contents(
-                                JSON.stringify(data, null, 2),
-                                null, false,
-                                Gio.FileCreateFlags.REPLACE_DESTINATION,
-                                null
-                            );
-                        }
+                    if (!file.query_exists(null)) {
+                        throw new Error(_('Database file not found'));
                     }
+                    
+                    const [success, contents] = file.load_contents(null);
+                    if (!success) {
+                        throw new Error(_('Failed to read database file'));
+                    }
+                    
+                    // Check if file is empty or invalid
+                    const contentStr = new TextDecoder().decode(contents);
+                    if (!contentStr || contentStr.trim() === '') {
+                        throw new Error(_('Database file is empty'));
+                    }
+                    
+                    let data;
+                    try {
+                        data = JSON.parse(contentStr);
+                    } catch (parseError) {
+                        log(`ClipMaster: JSON parse error: ${parseError.message}, content: ${contentStr.substring(0, 100)}`);
+                        throw new Error(_('Invalid JSON in database file. File may be corrupted.'));
+                    }
+                    
+                    // Ensure data structure exists
+                    if (!data || typeof data !== 'object') {
+                        data = { items: [] };
+                    }
+                    if (!Array.isArray(data.items)) {
+                        data.items = [];
+                    }
+                    
+                    const beforeCount = data.items.length;
+                    data.items = data.items.filter(i => i && i.isFavorite);
+                    const afterCount = data.items.length;
+                    const removedCount = beforeCount - afterCount;
+                    
+                    const encoder = new TextEncoder();
+                    const jsonStr = JSON.stringify(data, null, 2);
+                    file.replace_contents(
+                        encoder.encode(jsonStr),
+                        null, false,
+                        Gio.FileCreateFlags.REPLACE_DESTINATION,
+                        null
+                    );
+                    
+                    // Show success message
+                    const successDialog = new Adw.MessageDialog({
+                        heading: _('History Cleared'),
+                        body: _(`Removed ${removedCount} item(s). Please reload the extension (disable and enable) for changes to take effect.`),
+                        transient_for: window
+                    });
+                    successDialog.add_response('ok', _('OK'));
+                    successDialog.present(window);
                 } catch (e) {
                     log(`ClipMaster: Clear error: ${e.message}`);
+                    const errorDialog = new Adw.MessageDialog({
+                        heading: _('Error'),
+                        body: _('Error clearing history: ') + e.message,
+                        transient_for: window
+                    });
+                    errorDialog.add_response('ok', _('OK'));
+                    errorDialog.present(window);
                 }
             }
         });
