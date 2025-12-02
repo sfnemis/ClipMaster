@@ -95,3 +95,4 @@ test:
 logs:
 	@journalctl -f --user -g ClipMaster
 
+

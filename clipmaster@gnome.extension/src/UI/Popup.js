@@ -415,7 +415,7 @@ class ClipboardPopup extends St.BoxLayout {
         });
         
         const shortcutText = new St.Label({
-            text: '↑↓ Nav • Enter Paste • F Fav • T Text • P Pin • Del • Esc',
+            text: '↑↓ Nav • Enter Paste • Alt+F Fav • Alt+T Text • Alt+P Pin • Alt+D Del • Esc',
             style_class: 'clipmaster-footer-text',
             x_expand: true,
             x_align: Clutter.ActorAlign.CENTER
@@ -1431,7 +1431,64 @@ class ClipboardPopup extends St.BoxLayout {
             return Clutter.EVENT_STOP;
         }
         
-        // Delete - delete item (works even when search has focus)
+        // Check for Alt modifier (MOD1_MASK) - these work regardless of search focus
+        const hasAlt = event.get_state() & Clutter.ModifierType.MOD1_MASK;
+        
+        if (hasAlt) {
+            // Alt+P - toggle pin
+            if (symbol === Clutter.KEY_p || symbol === Clutter.KEY_P) {
+                this._isPinned = !this._isPinned;
+                if (this._isPinned) {
+                    this._pinButton.add_style_pseudo_class('checked');
+                } else {
+                    this._pinButton.remove_style_pseudo_class('checked');
+                }
+                debugLog(`Pin toggled via Alt+P: ${this._isPinned}`);
+                return Clutter.EVENT_STOP;
+            }
+            
+            // Alt+T - toggle plain text mode
+            if (symbol === Clutter.KEY_t || symbol === Clutter.KEY_T) {
+                this._plainTextMode = !this._plainTextMode;
+                if (this._plainTextMode) {
+                    this._plainTextButton.add_style_pseudo_class('checked');
+                } else {
+                    this._plainTextButton.remove_style_pseudo_class('checked');
+                }
+                debugLog(`Plain text mode via Alt+T: ${this._plainTextMode}`);
+                return Clutter.EVENT_STOP;
+            }
+            
+            // Alt+F - toggle favorite
+            if (symbol === Clutter.KEY_f || symbol === Clutter.KEY_F) {
+                if (this._items.length > 0 && this._selectedIndex < this._items.length) {
+                    this._database.toggleFavorite(this._items[this._selectedIndex].id);
+                    this._loadItems();
+                }
+                debugLog(`Favorite toggled via Alt+F`);
+                return Clutter.EVENT_STOP;
+            }
+            
+            // Alt+D - delete item
+            if (symbol === Clutter.KEY_d || symbol === Clutter.KEY_D) {
+                if (this._items.length > 0 && this._selectedIndex < this._items.length) {
+                    const item = this._items[this._selectedIndex];
+                    const itemPreview = item.preview || item.plainText || _('this item');
+                    const previewText = itemPreview.length > 50 ? itemPreview.substring(0, 50) + '...' : itemPreview;
+                    this._showConfirmDialog(
+                        _('Are you sure you want to delete "%s"? This action cannot be undone.').format(previewText),
+                        () => {
+                            this._database.deleteItem(item.id);
+                            this._loadItems();
+                        }
+                    );
+                }
+                debugLog(`Delete via Alt+D`);
+                return Clutter.EVENT_STOP;
+            }
+        }
+        
+        // Delete key - also delete item (works even when search has focus, no modifier needed)
         if (symbol === Clutter.KEY_Delete) {
             if (this._items.length > 0 && this._selectedIndex < this._items.length) {
                 const item = this._items[this._selectedIndex];
@@ -1450,45 +1507,8 @@ class ClipboardPopup extends St.BoxLayout {
         
         // These only work when search doesn't have focus (to allow typing)
         if (!searchHasFocus) {
-            // P - toggle pin (with Ctrl)
-            if ((symbol === Clutter.KEY_p || symbol === Clutter.KEY_P) && 
-                (event.get_state() & Clutter.ModifierType.CONTROL_MASK)) {
-                this._isPinned = !this._isPinned;
-                if (this._isPinned) {
-                    this._pinButton.add_style_pseudo_class('checked');
-                } else {
-                    this._pinButton.remove_style_pseudo_class('checked');
-                }
-                debugLog(`Pin toggled via keyboard: ${this._isPinned}`);
-                return Clutter.EVENT_STOP;
-            }
-            
-            // T - toggle plain text mode (with Ctrl)
-            if ((symbol === Clutter.KEY_t || symbol === Clutter.KEY_T) && 
-                (event.get_state() & Clutter.ModifierType.CONTROL_MASK)) {
-                this._plainTextMode = !this._plainTextMode;
-                if (this._plainTextMode) {
-                    this._plainTextButton.add_style_pseudo_class('checked');
-                } else {
-                    this._plainTextButton.remove_style_pseudo_class('checked');
-                }
-                debugLog(`Plain text mode: ${this._plainTextMode}`);
-                return Clutter.EVENT_STOP;
-            }
-            
-            // F - toggle favorite (with Ctrl)
-            if ((symbol === Clutter.KEY_f || symbol === Clutter.KEY_F) && 
-                (event.get_state() & Clutter.ModifierType.CONTROL_MASK)) {
-                if (this._items.length > 0 && this._selectedIndex < this._items.length) {
-                    this._database.toggleFavorite(this._items[this._selectedIndex].id);
-                    this._loadItems();
-                }
-                return Clutter.EVENT_STOP;
-            }
-            
-            // 1-9 - quick paste (only without modifiers to not conflict with typing)
-            const hasModifier = event.get_state() & (Clutter.ModifierType.CONTROL_MASK | Clutter.ModifierType.MOD1_MASK);
-            if (!hasModifier && symbol >= Clutter.KEY_1 && symbol <= Clutter.KEY_9) {
+            // 1-9 - quick paste (only without Alt modifier to not conflict with shortcuts)
+            if (!hasAlt && symbol >= Clutter.KEY_1 && symbol <= Clutter.KEY_9) {
                 const index = symbol - Clutter.KEY_1;
                 if (index < this._items.length) {
                     this._selectedIndex = index;
