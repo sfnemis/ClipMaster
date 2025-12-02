@@ -22,6 +22,7 @@ export class ClipboardMonitor {
         this._lastPrimaryContent = null;
         this._lastImageHash = null;
         this._imageCheckProcess = null;
+        this._isStopped = false;
         
         this._signalManager = new SignalManager();
         this._timeoutManager = new TimeoutManager();
@@ -117,6 +118,8 @@ export class ClipboardMonitor {
     }
     
     stop() {
+        this._isStopped = true;
+        
         this._signalManager.disconnectAll();
         this._timeoutManager.removeAll();
         
@@ -434,6 +437,8 @@ export class ClipboardMonitor {
     }
     
     _processText(text, selectionType = 'CLIPBOARD') {
+        if (this._isStopped) return;
+        
         debugLog(`_processText called with text: "${text ? text.substring(0, 100) : 'null'}"`);
         
         if (!ValidationUtils.isValidText(text, 1)) {
@@ -547,6 +552,8 @@ export class ClipboardMonitor {
     }
     
     _processImageFile(filePath, selectionType = 'CLIPBOARD') {
+        if (this._isStopped) return;
+        
         let fullPath = filePath;
         if (filePath.startsWith('~/')) {
             fullPath = GLib.build_filenamev([GLib.get_home_dir(), filePath.substring(2)]);

@@ -24,6 +24,7 @@ export class ClipboardDatabase {
         this._lists = [];
         this._nextId = 1;
         this._isDirty = false;
+        this._isDestroyed = false;
         
         this._lastWarningTime = 0;
         this._warningCooldownMs = 60000;
@@ -76,6 +77,8 @@ export class ClipboardDatabase {
     }
     
     _save() {
+        if (this._isDestroyed || !this._timeoutManager) return;
+        
         this._isDirty = true;
         
         this._timeoutManager.add(
@@ -90,6 +93,8 @@ export class ClipboardDatabase {
     }
     
     _saveImmediate() {
+        if (this._isDestroyed || !this._timeoutManager) return;
+        
         this._timeoutManager.remove('database-save');
         this._doSave();
     }
@@ -226,12 +231,18 @@ export class ClipboardDatabase {
     }
     
     destroy() {
-        this._saveImmediate();
-        this._timeoutManager.removeAll();
-        this._timeoutManager = null;
+        this._isDestroyed = true;
+        
+        if (this._timeoutManager) {
+            this._doSave();
+            this._timeoutManager.removeAll();
+            this._timeoutManager = null;
+        }
     }
     
     addItem(item) {
+        if (this._isDestroyed) return null;
+        
         const contentHash = HashUtils.hashContent(item.content);
         const existing = this._items.find(i => i.contentHash === contentHash || i.hash === contentHash);
         
@@ -368,6 +379,8 @@ export class ClipboardDatabase {
     }
     
     enforceLimit(maxItems) {
+        if (this._isDestroyed) return;
+        
         const favorites = this._items.filter(i => i.isFavorite);
         const nonFavorites = this._items.filter(i => !i.isFavorite);
         
