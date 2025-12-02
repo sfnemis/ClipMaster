@@ -208,7 +208,7 @@ sudo pacman -S wl-clipboard xclip
 | Search | Start typing when popup is open |
 | Navigate | Use `↑` `↓` arrow keys |
 | Quick paste | Press `1-9` for recent items |
-| Add to favorites | Press `F` on selected item or click the star icon |
+| Add to favorites | Press `Alt+F` on selected item or click the star icon |
 | Edit item | Right-click on an item and select "Edit Title" or "Edit Content" |
 | Delete item | Press `Del` on selected item or right-click and select "Delete" |
 
@@ -240,13 +240,13 @@ sudo pacman -S wl-clipboard xclip
 | `↑` `↓` | Navigate through items |
 | `Enter` | Paste selected item |
 | `1-9` | Quick paste (1st to 9th item) |
-| `F` | Toggle favorite on selected item |
-| `T` | Toggle plain text mode |
-| `P` | Toggle pin (keep popup open) |
+| `Alt+F` | Toggle favorite on selected item |
+| `Alt+T` | Toggle plain text mode |
+| `Alt+P` | Toggle pin (keep popup open) |
+| `Alt+D` | Delete selected item |
 | `Del` | Delete selected item |
 | `Esc` | Close popup |
-| `Tab` | Focus search box |
-| `Ctrl+F` | Focus search box |
+| *Type* | Auto-focus search and filter |
 
 ---
 
