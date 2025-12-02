@@ -1450,8 +1450,9 @@ class ClipboardPopup extends St.BoxLayout {
         
         // These only work when search doesn't have focus (to allow typing)
         if (!searchHasFocus) {
-            // P - toggle pin
-            if (symbol === Clutter.KEY_p || symbol === Clutter.KEY_P) {
+            // P - toggle pin (with Ctrl)
+            if ((symbol === Clutter.KEY_p || symbol === Clutter.KEY_P) && 
+                (event.get_state() & Clutter.ModifierType.CONTROL_MASK)) {
                 this._isPinned = !this._isPinned;
                 if (this._isPinned) {
                     this._pinButton.add_style_pseudo_class('checked');
@@ -1462,8 +1463,9 @@ class ClipboardPopup extends St.BoxLayout {
                 return Clutter.EVENT_STOP;
             }
             
-            // T - toggle plain text mode
-            if (symbol === Clutter.KEY_t || symbol === Clutter.KEY_T) {
+            // T - toggle plain text mode (with Ctrl)
+            if ((symbol === Clutter.KEY_t || symbol === Clutter.KEY_T) && 
+                (event.get_state() & Clutter.ModifierType.CONTROL_MASK)) {
                 this._plainTextMode = !this._plainTextMode;
                 if (this._plainTextMode) {
                     this._plainTextButton.add_style_pseudo_class('checked');
@@ -1474,8 +1476,9 @@ class ClipboardPopup extends St.BoxLayout {
                 return Clutter.EVENT_STOP;
             }
             
-            // F - toggle favorite
-            if (symbol === Clutter.KEY_f || symbol === Clutter.KEY_F) {
+            // F - toggle favorite (with Ctrl)
+            if ((symbol === Clutter.KEY_f || symbol === Clutter.KEY_F) && 
+                (event.get_state() & Clutter.ModifierType.CONTROL_MASK)) {
                 if (this._items.length > 0 && this._selectedIndex < this._items.length) {
                     this._database.toggleFavorite(this._items[this._selectedIndex].id);
                     this._loadItems();
@@ -1483,13 +1486,26 @@ class ClipboardPopup extends St.BoxLayout {
                 return Clutter.EVENT_STOP;
             }
             
-            // 1-9 - quick paste
-            if (symbol >= Clutter.KEY_1 && symbol <= Clutter.KEY_9) {
+            // 1-9 - quick paste (only without modifiers to not conflict with typing)
+            const hasModifier = event.get_state() & (Clutter.ModifierType.CONTROL_MASK | Clutter.ModifierType.MOD1_MASK);
+            if (!hasModifier && symbol >= Clutter.KEY_1 && symbol <= Clutter.KEY_9) {
                 const index = symbol - Clutter.KEY_1;
                 if (index < this._items.length) {
                     this._selectedIndex = index;
                     this._pasteSelected();
                 }
+                return Clutter.EVENT_STOP;
+            }
+            
+            // Auto-focus search: Forward printable characters to search entry
+            const unicode = event.get_key_unicode();
+            if (unicode && unicode.match(/^[a-zA-Z0-9\s\-_\.@#$%&*()+=\[\]{}|\\:;"'<>,?/~`]$/)) {
+                // Focus search entry and insert the character
+                this._searchEntry.grab_key_focus();
+                const currentText = this._searchEntry.get_text();
+                this._searchEntry.set_text(currentText + unicode);
+                // Move cursor to end
+                this._searchEntry.clutter_text.set_cursor_position(-1);
                 return Clutter.EVENT_STOP;
             }
         }
