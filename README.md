@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="clipmaster@gnome.extension/icons/clipmaster-symbolic.svg" width="128" height="128" alt="ClipMaster Logo">
+  <img src="clipmaster@gnome.extension/assets/icons/clipmaster-symbolic.svg" width="128" height="128" alt="ClipMaster Logo">
 </p>
 
 <h1 align="center">ClipMaster</h1>
