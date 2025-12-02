@@ -1,7 +1,6 @@
-/**
+/*
  * ClipMaster - Panel Indicator
- * Panel button and menu for quick access
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * License: GPL-2.0-or-later
  */
 
 import GObject from 'gi://GObject';
@@ -23,7 +22,6 @@ class ClipMasterIndicator extends PanelMenu.Button {
         this._extension = extension;
         this._settings = extension._settings;
         
-        // Panel icon
         this._icon = new St.Icon({
             icon_name: this._settings.get_string('indicator-icon'),
             style_class: 'system-status-icon'
@@ -33,34 +31,28 @@ class ClipMasterIndicator extends PanelMenu.Button {
         this._buildMenu();
     }
     
-    // Override vfunc_event to prevent default menu behavior on left click
     vfunc_event(event) {
         if (event.type() === Clutter.EventType.BUTTON_PRESS) {
             const button = event.get_button();
             
             if (button === 1) {
-                // Left click - toggle popup (NOT menu)
                 this._extension.togglePopup();
                 return Clutter.EVENT_STOP;
             } else if (button === 3) {
-                // Right click - show menu
                 this.menu.toggle();
                 return Clutter.EVENT_STOP;
             }
         }
         
-        // For other events, call parent
         return super.vfunc_event(event);
     }
     
     _buildMenu() {
-        // Recent items section
         this._recentSection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._recentSection);
         
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         
-        // Actions
         this.menu.addAction(_('Show Clipboard Manager'), () => {
             this.menu.close();
             this._extension.showPopup();
@@ -80,7 +72,6 @@ class ClipMasterIndicator extends PanelMenu.Button {
     }
     
     refresh() {
-        // Update recent items in menu
         this._recentSection.removeAll();
         
         const items = this._extension._database.getItems({ limit: 5 });
@@ -115,8 +106,3 @@ class ClipMasterIndicator extends PanelMenu.Button {
         });
     }
 });
-
-
-
-
-

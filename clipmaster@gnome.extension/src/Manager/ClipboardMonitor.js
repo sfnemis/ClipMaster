@@ -1,7 +1,6 @@
-/**
+/*
  * ClipMaster - Clipboard Monitor
- * Watches for clipboard changes (optimized)
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * License: GPL-2.0-or-later
  */
 
 import GLib from 'gi://GLib';
@@ -134,7 +133,7 @@ export class ClipboardMonitor {
             try {
                 this._imageCheckProcess.force_exit();
             } catch (e) {
-                // Process may already be finished
+                // already finished
             }
             this._imageCheckProcess = null;
         }
@@ -410,7 +409,7 @@ export class ClipboardMonitor {
                             try {
                                 file.delete(null);
                             } catch (e) {
-                                // Ignore cleanup errors
+                                // ignore cleanup errors
                             }
                         }
                     } else {
@@ -541,7 +540,7 @@ export class ClipboardMonitor {
                 return true;
             }
         } catch (e) {
-            // Ignore MIME type check errors
+            // ignore MIME check errors
         }
         
         return false;
@@ -683,12 +682,12 @@ export class ClipboardMonitor {
                     try {
                         proc.wait_finish(result);
                     } catch (e) {
-                        // Ignore
+                        // ignore
                     }
                     try {
                         tempFile.delete(null);
                     } catch (e) {
-                        // Ignore
+                        // ignore
                     }
                 });
             } else {
@@ -700,12 +699,12 @@ export class ClipboardMonitor {
                     try {
                         proc.wait_finish(result);
                     } catch (e) {
-                        // Ignore
+                        // ignore
                     }
                     try {
                         tempFile.delete(null);
                     } catch (e) {
-                        // Ignore
+                        // ignore
                     }
                 });
             }
@@ -714,8 +713,3 @@ export class ClipboardMonitor {
         }
     }
 }
-
-
-
-
-

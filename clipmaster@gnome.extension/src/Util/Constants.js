@@ -1,9 +1,8 @@
-/**
- * ClipMaster - Constants and Enums
- * SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * ClipMaster Constants
+ * License: GPL-2.0-or-later
  */
 
-// Clipboard Item Types
 export const ItemType = {
     TEXT: 'text',
     HTML: 'html',
@@ -13,7 +12,6 @@ export const ItemType = {
     COLOR: 'color'
 };
 
-// Debug Logger - controlled by settings
 let _debugMode = false;
 
 export function debugLog(message) {
@@ -32,8 +30,3 @@ export function setDebugMode(enabled) {
 export function isDebugMode() {
     return _debugMode;
 }
-
-
-
-
-

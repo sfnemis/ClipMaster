@@ -1,7 +1,6 @@
-/**
- * ClipMaster - Clipboard Popup UI
- * Main popup interface for clipboard management
- * SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * ClipMaster - Popup UI
+ * License: GPL-2.0-or-later
  */
 
 import GLib from 'gi://GLib';
@@ -31,7 +30,7 @@ class ClipboardPopup extends St.BoxLayout {
             can_focus: true,
             track_hover: true,
             visible: false,
-            opacity: 0,  // Start fully transparent!
+            opacity: 0,
             x: 100,
             y: 100,
             width: 450,
@@ -48,30 +47,25 @@ class ClipboardPopup extends St.BoxLayout {
         this._searchQuery = '';
         this._currentListId = null;
         this._plainTextMode = false;
-        this._isPinned = false;  // Pin state - keeps popup open on outside click
-        this._isShowing = false;  // Track if popup is intentionally shown
-        this._showTime = 0;  // Track when popup was shown (for grace period)
-        this._pasteFromHover = false;  // Track if paste came from hover (paste-on-select)
-        this._customStylesheet = null;  // Track custom theme stylesheet
+        this._isPinned = false;
+        this._isShowing = false;
+        this._showTime = 0;
+        this._pasteFromHover = false;
+        this._customStylesheet = null;
         
-        // Drag state
         this._dragging = false;
         this._dragStartX = 0;
         this._dragStartY = 0;
         this._dragStartPosX = 0;
         this._dragStartPosY = 0;
         
-        // Modal overlay for click-outside detection
         this._modalOverlay = null;
         
-        // Use utility managers for proper lifecycle management
         this._signalManager = new SignalManager();
         this._timeoutManager = new TimeoutManager();
         
-        // Apply theme
         this._applyTheme();
         
-        // Listen for theme changes using SignalManager
         this._signalManager.connect(
             this._settings,
             'changed::dark-theme',
@@ -97,7 +91,6 @@ class ClipboardPopup extends St.BoxLayout {
     
     _applyTheme() {
         try {
-            // Remove all theme classes
             this.remove_style_class_name('light');
             this.remove_style_class_name('theme-catppuccin');
             this.remove_style_class_name('theme-dracula');
@@ -112,19 +105,15 @@ class ClipboardPopup extends St.BoxLayout {
             this.remove_style_class_name('theme-material');
             this.remove_style_class_name('theme-ayu');
             
-            // Check for custom theme
             const customThemePath = this._settings.get_string('custom-theme-path') || '';
             if (customThemePath) {
-                // Load custom theme
                 const customFile = Gio.File.new_for_path(customThemePath);
                 if (customFile.query_exists(null)) {
                     try {
-                        // Unload previous custom theme if any
                         if (this._customStylesheet) {
                             const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
                             theme.unload_stylesheet(this._customStylesheet);
                         }
-                        // Load new custom theme
                         const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
                         theme.load_stylesheet(customFile);
                         this._customStylesheet = customFile;
@@ -133,7 +122,6 @@ class ClipboardPopup extends St.BoxLayout {
                     }
                 }
             } else {
-                // Unload custom theme if cleared
                 if (this._customStylesheet) {
                     try {
                         const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
@@ -145,13 +133,11 @@ class ClipboardPopup extends St.BoxLayout {
                 }
             }
             
-            // Apply selected theme (only if no custom theme)
             if (!customThemePath) {
                 const themeName = this._settings.get_string('theme') || 'gruvbox';
                 this.add_style_class_name(`theme-${themeName}`);
             }
             
-            // Also apply light/dark based on dark-theme setting (for backward compatibility)
             const isDark = this._settings.get_boolean('dark-theme');
             if (!isDark) {
                 this.add_style_class_name('light');
@@ -162,14 +148,12 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     _buildUI() {
-        // Header
         this._header = new St.BoxLayout({
             style_class: 'clipmaster-header',
             x_expand: true,
             reactive: true
         });
         
-        // ClipMaster icon (also serves as drag indicator)
         const headerIcon = new St.Icon({
             gicon: Gio.icon_new_for_string(
                 this._extension._extensionPath + '/icons/clipmaster-symbolic.svg'
@@ -179,7 +163,6 @@ class ClipboardPopup extends St.BoxLayout {
         });
         this._header.add_child(headerIcon);
         
-        // Title
         const title = new St.Label({
             text: 'ClipMaster',
             style_class: 'clipmaster-title',
@@ -188,7 +171,6 @@ class ClipboardPopup extends St.BoxLayout {
         });
         this._header.add_child(title);
         
-        // Plain text button - paste as plain text
         this._plainTextButton = new St.Button({
             style_class: 'clipmaster-toggle-button',
             child: new St.Icon({
@@ -209,7 +191,6 @@ class ClipboardPopup extends St.BoxLayout {
         });
         this._header.add_child(this._plainTextButton);
         
-        // Pin button - keeps popup open when clicking outside
         this._pinButton = new St.Button({
             style_class: 'clipmaster-toggle-button',
             child: new St.Icon({
@@ -232,7 +213,6 @@ class ClipboardPopup extends St.BoxLayout {
         });
         this._header.add_child(this._pinButton);
         
-        // Add List button
         this._addListButton = new St.Button({
             style_class: 'clipmaster-toggle-button',
             child: new St.Icon({
@@ -253,14 +233,13 @@ class ClipboardPopup extends St.BoxLayout {
         });
         this._header.add_child(this._addListButton);
         
-        // Close button - CRITICAL: must stop event propagation
         this._closeButton = new St.Button({
             style_class: 'clipmaster-close-button',
             child: new St.Icon({
                 icon_name: 'window-close-symbolic',
                 icon_size: 16
             }),
-            can_focus: false  // Prevent focus stealing
+            can_focus: false
         });
         this._closeButton.connect('button-press-event', () => {
             debugLog('Close button pressed');
@@ -274,11 +253,9 @@ class ClipboardPopup extends St.BoxLayout {
         });
         this._header.add_child(this._closeButton);
         
-        // Header drag - entire header is draggable
         this._header.connect('button-press-event', (actor, event) => {
             debugLog(`Header button-press-event triggered`);
             
-            // Don't start drag if clicking on buttons
             try {
                 const source = event.get_source();
                 debugLog(`Event source: ${source ? source.toString() : 'null'}`);
@@ -294,7 +271,6 @@ class ClipboardPopup extends St.BoxLayout {
                 
                 const parent = source.get_parent ? source.get_parent() : null;
                 
-                // Check if clicking on buttons
                 if (source === this._closeButton || 
                     source === this._pinButton ||
                     source === this._plainTextButton ||
@@ -320,7 +296,6 @@ class ClipboardPopup extends St.BoxLayout {
         
         this.add_child(this._header);
         
-        // Search bar
         this._searchEntry = new St.Entry({
             style_class: 'clipmaster-search',
             hint_text: _('Search... (type to filter)'),
@@ -333,7 +308,6 @@ class ClipboardPopup extends St.BoxLayout {
         });
         this.add_child(this._searchEntry);
         
-        // Filter bar
         const filterBar = new St.BoxLayout({
             style_class: 'clipmaster-filter-bar',
             x_expand: true
@@ -379,7 +353,6 @@ class ClipboardPopup extends St.BoxLayout {
         this._urlButton.connect('clicked', () => { this._setFilter(null, ItemType.URL); return Clutter.EVENT_STOP; });
         filterBar.add_child(this._urlButton);
         
-        // Lists dropdown
         this._listsButton = new St.Button({
             style_class: 'clipmaster-filter-button',
             label: _('Lists ▾'),
@@ -390,7 +363,6 @@ class ClipboardPopup extends St.BoxLayout {
         
         this.add_child(filterBar);
         
-        // Items scroll view
         this._scrollView = new St.ScrollView({
             style_class: 'clipmaster-scroll',
             hscrollbar_policy: St.PolicyType.NEVER,
@@ -408,7 +380,6 @@ class ClipboardPopup extends St.BoxLayout {
         this._scrollView.add_child(this._itemsBox);
         this.add_child(this._scrollView);
         
-        // Footer
         const footer = new St.BoxLayout({
             style_class: 'clipmaster-footer',
             x_expand: true
@@ -488,17 +459,14 @@ class ClipboardPopup extends St.BoxLayout {
             return;
         }
         
-        // Create a simple menu
         const menu = new PopupMenu.PopupMenu(this._listsButton, 0.0, St.Side.TOP);
         
         lists.forEach(list => {
-            // Create a menu item with delete button
             const menuItem = new PopupMenu.PopupMenuItem(list.name);
             menuItem.connect('activate', () => {
                 this._setFilter(list.id);
             });
             
-            // Add delete button
             const deleteButton = new St.Button({
                 style_class: 'clipmaster-list-delete-button',
                 child: new St.Icon({
@@ -510,7 +478,6 @@ class ClipboardPopup extends St.BoxLayout {
             deleteButton.connect('clicked', () => {
                 const listName = list.name;
                 menu.close();
-                // Delay dialog opening to allow menu to fully dispose
                 this._timeoutManager.add(GLib.PRIORITY_DEFAULT, 100, () => {
                     this._showConfirmDialog(
                         _('Are you sure you want to delete the list "%s"? This action cannot be undone.').format(listName),
@@ -556,7 +523,6 @@ class ClipboardPopup extends St.BoxLayout {
             }
             
             debugLog(`Connecting motion-event to global.stage`);
-            // Use SignalManager for drag signals
             this._signalManager.connect(
                 global.stage,
                 'motion-event',
@@ -601,7 +567,6 @@ class ClipboardPopup extends St.BoxLayout {
     
     _stopDrag() {
         this._dragging = false;
-        // Use SignalManager to disconnect drag signals
         if (this._signalManager) {
             this._signalManager.disconnect('drag-motion');
             this._signalManager.disconnect('drag-release');
@@ -613,20 +578,17 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     _createModalOverlay() {
-        // Don't use modal overlay - use simpler click detection
-        // that checks if click is inside popup bounds
+        // not used - using simpler click detection
     }
     
     _removeModalOverlay() {
         this._stopDrag();
-        // Use SignalManager to disconnect click outside handler
         if (this._signalManager) {
             this._signalManager.disconnect('click-outside-handler');
         }
     }
     
     _setupClickOutside() {
-        // Remove existing handler first using SignalManager
         this._signalManager.disconnect('click-outside-handler');
         
         debugLog('Setting up click outside handler');
@@ -634,22 +596,16 @@ class ClipboardPopup extends St.BoxLayout {
             global.stage,
             'button-press-event',
             (actor, event) => {
-            // Safety check: ensure popup is still valid and not disposed
             try {
-                // Check if popup is still valid by trying to access a property
-                // If disposed, this will throw an error and we'll catch it
                 if (!this || this._signalManager === null) {
-                    // Popup is being destroyed, disconnect handler
                     return Clutter.EVENT_PROPAGATE;
                 }
                 
-                // Use try-catch for property access in case object is disposed
                 let isVisible, isShowing;
                 try {
                     isVisible = this.visible;
                     isShowing = this._isShowing;
                 } catch (e) {
-                    // Object is disposed, disconnect handler and return
                     debugLog('Popup is disposed, disconnecting click outside handler');
                     this._signalManager.disconnect('click-outside-handler');
                     return Clutter.EVENT_PROPAGATE;
@@ -659,14 +615,12 @@ class ClipboardPopup extends St.BoxLayout {
                     return Clutter.EVENT_PROPAGATE;
                 }
                 
-                // Grace period: ignore clicks within 1000ms of showing popup (increased)
                 const timeSinceShow = Date.now() - this._showTime;
                 if (timeSinceShow < 1000) {
                     debugLog(`Ignoring click during grace period (${timeSinceShow}ms since show)`);
                     return Clutter.EVENT_PROPAGATE;
                 }
                 
-                // If pinned, don't close on outside click
                 if (this._isPinned) {
                     debugLog(`Popup is pinned, ignoring outside click`);
                     return Clutter.EVENT_PROPAGATE;
@@ -679,44 +633,38 @@ class ClipboardPopup extends St.BoxLayout {
                     
                     debugLog(`Click at (${clickX}, ${clickY}), popup at (${popupX}, ${popupY}), size (${popupW}, ${popupH})`);
                     
-                    // Check if click is INSIDE popup - if so, let it through
                     const isInside = clickX >= popupX && clickX <= popupX + popupW &&
                                      clickY >= popupY && clickY <= popupY + popupH;
                     
                     if (isInside) {
                         debugLog('Click is inside popup, allowing');
-                        // Click is inside popup, let it propagate to popup elements
                         return Clutter.EVENT_PROPAGATE;
                     } else {
                         debugLog('Click is outside popup, closing');
-                        // Click is outside popup, close it
-                        // Check if extension still exists
                         if (this._extension && this._extension.hidePopup) {
                             this._extension.hidePopup();
                         }
-                        return Clutter.EVENT_STOP;  // Stop propagation to prevent other handlers
+                        return Clutter.EVENT_STOP;
                     }
                 } catch (e) {
                     debugLog(`Click outside error: ${e.message}`);
-                    // If error occurs, disconnect handler to prevent further errors
                     try {
                         if (this._signalManager) {
                             this._signalManager.disconnect('click-outside-handler');
                         }
                     } catch (disconnectError) {
-                        // Ignore disconnect errors
+                        // ignore
                     }
                     return Clutter.EVENT_PROPAGATE;
                 }
             } catch (e) {
-                // Popup is disposed or invalid, disconnect handler
                 debugLog(`Click outside handler error (popup disposed?): ${e.message}`);
                 try {
                     if (this._signalManager) {
                         this._signalManager.disconnect('click-outside-handler');
                     }
                 } catch (disconnectError) {
-                    // Ignore disconnect errors
+                    // ignore
                 }
                 return Clutter.EVENT_PROPAGATE;
             }
@@ -725,18 +673,11 @@ class ClipboardPopup extends St.BoxLayout {
         );
     }
     
-    /**
-     * Show confirmation dialog before deletion
-     * @param {string} message - Confirmation message
-     * @param {Function} onConfirm - Callback when user confirms
-     */
     _showConfirmDialog(message, onConfirm) {
         debugLog('_showConfirmDialog called');
         try {
-            // Create modal dialog - same style as create list dialog
             const dialog = new ModalDialog.ModalDialog({ styleClass: 'clipmaster-dialog' });
             
-            // Create message label
             const messageLabel = new St.Label({
                 text: message,
                 style_class: 'clipmaster-confirm-dialog-message'
@@ -745,10 +686,8 @@ class ClipboardPopup extends St.BoxLayout {
             messageLabel.clutter_text.set_line_wrap_mode(Pango.WrapMode.WORD);
             messageLabel.set_width(400);
             
-            // Add message directly to dialog contentLayout
             dialog.contentLayout.add_child(messageLabel);
             
-            // Add buttons using addButton method (same as create list dialog)
             dialog.addButton({
                 label: _('Cancel'),
                 action: () => {
@@ -770,13 +709,11 @@ class ClipboardPopup extends St.BoxLayout {
                 default: true
             });
             
-            // Show dialog (same as create list dialog - no Meta.get_current_time())
             debugLog('Opening delete confirmation dialog...');
             dialog.open();
         } catch (e) {
             log(`ClipMaster: Error showing confirm dialog: ${e.message}`);
             debugLog(`Confirm dialog error: ${e.message}`);
-            // If dialog fails, just execute the action directly
             if (onConfirm) {
                 onConfirm();
             }
@@ -787,7 +724,6 @@ class ClipboardPopup extends St.BoxLayout {
         this._currentListId = listId;
         this._currentType = type;
         
-        // Update button styles
         [this._allButton, this._favButton, this._textButton, this._imageButton, this._urlButton, this._listsButton].forEach(b => {
             if (b) b.remove_style_class_name('active');
         });
@@ -810,7 +746,6 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     show() {
-        // Only show if intentionally triggered
         if (!this._isShowing) {
             return;
         }
@@ -821,21 +756,16 @@ class ClipboardPopup extends St.BoxLayout {
         this._currentListId = null;
         this._currentType = null;
         this._plainTextMode = false;
-        // Don't reset pin state - user controls it explicitly
         
         this._loadItems();
         
-        // Make popup visible AND opaque
         this.visible = true;
         this.opacity = 255;
         this.reactive = true;
-        this._showTime = Date.now();  // Record show time for grace period
+        this._showTime = Date.now();
         
         debugLog(`Popup shown at ${this._showTime}`);
         
-        // Setup click outside handler after popup is visible (longer delay to prevent immediate closing)
-        // Use longer delay to ensure popup is fully rendered and user has time to see it
-        // Use TimeoutManager for proper cleanup
         this._timeoutManager.add(
             GLib.PRIORITY_DEFAULT,
             800,
@@ -856,7 +786,6 @@ class ClipboardPopup extends St.BoxLayout {
     hide() {
         debugLog(`hide() called - _isPinned=${this._isPinned}, _isShowing=${this._isShowing}`);
         
-        // If pinned, don't hide
         if (this._isPinned) {
             debugLog('Popup is pinned, not hiding');
             return;
@@ -864,8 +793,6 @@ class ClipboardPopup extends St.BoxLayout {
         
         this._isShowing = false;
         
-        // Disconnect click outside handler BEFORE removing overlay
-        // This prevents handler from trying to access disposed popup
         try {
             if (this._signalManager) {
                 this._signalManager.disconnect('click-outside-handler');
@@ -875,22 +802,19 @@ class ClipboardPopup extends St.BoxLayout {
             debugLog(`Error disconnecting click outside handler: ${e.message}`);
         }
         
-        this._removeModalOverlay();  // This also removes click outside handler
+        this._removeModalOverlay();
         this.visible = false;
-        this.opacity = 0;  // Make fully transparent
+        this.opacity = 0;
         this.reactive = false;
         debugLog('Popup hidden');
     }
     
-    // GJS best practice: dispose() for cleanup before destroy()
     vfunc_dispose() {
-        // Cleanup all signals using SignalManager
         if (this._signalManager) {
             this._signalManager.disconnectAll();
             this._signalManager = null;
         }
         
-        // Cleanup all timeouts using TimeoutManager
         if (this._timeoutManager) {
             this._timeoutManager.removeAll();
             this._timeoutManager = null;
@@ -899,7 +823,6 @@ class ClipboardPopup extends St.BoxLayout {
         this._removeModalOverlay();
         this._stopDrag();
         
-        // Unload custom stylesheet if any
         if (this._customStylesheet) {
             try {
                 const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
@@ -910,7 +833,6 @@ class ClipboardPopup extends St.BoxLayout {
             }
         }
         
-        // Clear references
         this._extension = null;
         this._settings = null;
         this._database = null;
@@ -920,13 +842,11 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     destroy() {
-        // Ensure dispose is called first
         this.vfunc_dispose();
         super.destroy();
     }
     
     _loadItems() {
-        // Clear existing items
         this._itemsBox.destroy_all_children();
         
         const limit = this._settings.get_int('items-per-page');
@@ -969,27 +889,22 @@ class ClipboardPopup extends St.BoxLayout {
         row._item = item;
         row._index = index;
         
-        // Connect click
         row.connect('button-press-event', (actor, event) => {
             debugLog(`Row ${index} button-press-event, button=${event.get_button()}`);
             if (event.get_button() === 1) {
-                // Cancel any pending hover paste timeout
                 if (row._pasteTimeoutId) {
                     debugLog(`Cancelling paste timeout for item ${index} (user clicked)`);
                     GLib.source_remove(row._pasteTimeoutId);
                     row._pasteTimeoutId = null;
                 }
                 
-                // Single click - select and paste
                 this._selectedIndex = index;
                 this._updateSelection();
                 debugLog(`Single click on row ${index}, selecting and pasting...`);
-                // Paste selected item (not from hover, so popup will close if close-on-paste is enabled)
                 this._pasteFromHover = false;
                 this._pasteSelected();
                 return Clutter.EVENT_STOP;
             } else if (event.get_button() === 3) {
-                // Right click - show context menu
                 this._selectedIndex = index;
                 this._updateSelection();
                 this._showContextMenu(item, row);
@@ -998,13 +913,11 @@ class ClipboardPopup extends St.BoxLayout {
             return Clutter.EVENT_PROPAGATE;
         });
         
-        // Hover - Paste on selection
         row.connect('enter-event', (actor, event) => {
             debugLog(`ENTER EVENT on row ${index}`);
             this._selectedIndex = index;
             this._updateSelection();
             
-            // Paste on selection if enabled
             let pasteOnSelect = false;
             try {
                 pasteOnSelect = this._settings.get_boolean('paste-on-select');
@@ -1015,7 +928,6 @@ class ClipboardPopup extends St.BoxLayout {
             debugLog(`Hover on item ${index}, paste-on-select=${pasteOnSelect}, visible=${this.visible}, isShowing=${this._isShowing}`);
             
             if (pasteOnSelect) {
-                // Store timeout ID to cancel if user moves away
                 if (row._pasteTimeoutId) {
                     debugLog(`Cancelling existing paste timeout for row ${index}`);
                     try {
@@ -1027,19 +939,14 @@ class ClipboardPopup extends St.BoxLayout {
                 }
                 
                 debugLog(`Setting up paste timeout for row ${index} (500ms delay)`);
-                // Small delay to prevent accidental pastes while navigating
                 row._pasteTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
                     debugLog(`Paste timeout fired for row ${index} - checking conditions...`);
                     debugLog(`  selectedIndex=${this._selectedIndex}, index=${index}, visible=${this.visible}, isShowing=${this._isShowing}`);
                     
-                    // Only paste if still on the same item and popup is visible
                     if (this._selectedIndex === index && this.visible && this._isShowing) {
                         debugLog(`✓ Conditions met - PASTING item ${index} (from paste-on-select hover)`);
-                        // Mark that this is from paste-on-select (not explicit click)
                         this._pasteFromHover = true;
-                        // Paste to clipboard
                         this._pasteSelected();
-                        // Reset after a short delay
                         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
                             this._pasteFromHover = false;
                             return GLib.SOURCE_REMOVE;
@@ -1055,7 +962,6 @@ class ClipboardPopup extends St.BoxLayout {
             }
         });
         
-        // Cancel paste timeout if user leaves the row
         row.connect('leave-event', (actor, event) => {
             debugLog(`LEAVE EVENT on row ${index}`);
             if (row._pasteTimeoutId) {
@@ -1069,7 +975,6 @@ class ClipboardPopup extends St.BoxLayout {
             }
         });
         
-        // Number badge for quick access (1-9)
         if (index < 9) {
             const numLabel = new St.Label({
                 text: (index + 1).toString(),
@@ -1081,7 +986,6 @@ class ClipboardPopup extends St.BoxLayout {
             row.add_child(spacer);
         }
         
-        // Type icon (simple icon for all types including images)
         const iconName = this._getTypeIcon(item.type);
         const icon = new St.Icon({
             icon_name: iconName,
@@ -1090,14 +994,12 @@ class ClipboardPopup extends St.BoxLayout {
         });
         row.add_child(icon);
         
-        // Content box
         const contentBox = new St.BoxLayout({
             vertical: true,
             x_expand: true,
             style_class: 'clipmaster-item-content'
         });
         
-        // Title if exists
         if (item.title) {
             const titleLabel = new St.Label({
                 text: item.title,
@@ -1109,7 +1011,6 @@ class ClipboardPopup extends St.BoxLayout {
             contentBox.add_child(titleLabel);
         }
         
-        // Preview
         let previewText = item.preview || item.plainText || item.content || '';
         if (item.type === ItemType.IMAGE) {
             const size = item.metadata?.size ? ` (${Math.round(item.metadata.size / 1024)}KB)` : '';
@@ -1131,7 +1032,6 @@ class ClipboardPopup extends St.BoxLayout {
         previewLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         contentBox.add_child(previewLabel);
         
-        // Date/time display
         if (item.created) {
             const date = new Date(item.created);
             const now = new Date();
@@ -1150,7 +1050,6 @@ class ClipboardPopup extends St.BoxLayout {
             } else if (diffDays < 7) {
                 timeText = `${diffDays} ${diffDays === 1 ? _('day') : _('days')} ago`;
             } else {
-                // Show date
                 const day = String(date.getDate()).padStart(2, '0');
                 const month = String(date.getMonth() + 1).padStart(2, '0');
                 const year = date.getFullYear();
@@ -1170,7 +1069,6 @@ class ClipboardPopup extends St.BoxLayout {
         
         row.add_child(contentBox);
         
-        // Favorite button (always visible, shows state)
         const favButton = new St.Button({
             style_class: 'clipmaster-fav-button',
             can_focus: false,
@@ -1187,12 +1085,9 @@ class ClipboardPopup extends St.BoxLayout {
         
         favButton.connect('button-press-event', (actor, event) => {
             if (event.get_button() === 1) {
-                // Toggle favorite
                 const newFavoriteState = this._database.toggleFavorite(item.id);
-                // Update icon
                 favIcon.icon_name = newFavoriteState ? 'starred-symbolic' : 'non-starred-symbolic';
                 favIcon.style_class = newFavoriteState ? 'clipmaster-item-fav' : 'clipmaster-item-fav-inactive';
-                // Reload items to reflect changes
                 this._loadItems();
                 return Clutter.EVENT_STOP;
             }
@@ -1242,7 +1137,6 @@ class ClipboardPopup extends St.BoxLayout {
         debugLog(`✓ _pasteSelected: Pasting item ${item.id} (type: ${item.type})`);
         debugLog(`  Item preview: ${item.preview ? item.preview.substring(0, 50) : 'no preview'}`);
         
-        // Handle image items differently
         if (item.type === ItemType.IMAGE && item.content) {
             debugLog(`Copying image to clipboard: ${item.content}`);
             this._monitor.copyImageToClipboard(item.content);
@@ -1252,7 +1146,6 @@ class ClipboardPopup extends St.BoxLayout {
             this._monitor.copyToClipboard(content, this._plainTextMode);
         }
         
-        // Update usage
         this._database.updateItem(item.id, {
             lastUsed: Date.now(),
             useCount: (item.useCount || 1) + 1
@@ -1268,8 +1161,6 @@ class ClipboardPopup extends St.BoxLayout {
         const isFromHover = this._pasteFromHover || false;
         debugLog(`close-on-paste=${closeOnPaste}, _isPinned=${this._isPinned}, isFromHover=${isFromHover}`);
         
-        // Don't close if paste came from hover (paste-on-select)
-        // Only close if user explicitly clicked AND close-on-paste is enabled AND popup is not pinned
         if (closeOnPaste && !this._isPinned && !isFromHover) {
             debugLog(`Closing popup after paste (close-on-paste=true, not pinned, explicit click)`);
             this._extension.hidePopup();
@@ -1281,15 +1172,12 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     _showContextMenu(item, row) {
-        // Create a simple popup menu
         const menu = new PopupMenu.PopupMenu(row, 0.0, St.Side.TOP);
         
-        // Edit title
         menu.addAction(_('Edit Title...'), () => {
             this._showEditDialog(item, 'title');
         });
         
-        // Edit content (for text items)
         if (item.type === ItemType.TEXT || item.type === ItemType.URL) {
             menu.addAction(_('Edit Content...'), () => {
                 this._showEditDialog(item, 'content');
@@ -1298,14 +1186,12 @@ class ClipboardPopup extends St.BoxLayout {
         
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         
-        // Toggle favorite
         const favLabel = item.isFavorite ? _('Remove from Favorites') : _('Add to Favorites');
         menu.addAction(favLabel, () => {
             this._database.toggleFavorite(item.id);
             this._loadItems();
         });
         
-        // Add to list submenu
         const lists = this._database.getLists();
         if (lists.length > 0) {
             const listSubmenu = new PopupMenu.PopupSubMenuMenuItem(_('Add to List'));
@@ -1320,12 +1206,10 @@ class ClipboardPopup extends St.BoxLayout {
         
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         
-        // Delete
         menu.addAction(_('Delete'), () => {
             const itemPreview = item.preview || item.plainText || _('this item');
             const previewText = itemPreview.length > 50 ? itemPreview.substring(0, 50) + '...' : itemPreview;
             menu.close();
-            // Delay dialog opening to allow menu to fully dispose
             this._timeoutManager.add(GLib.PRIORITY_DEFAULT, 100, () => {
                 this._showConfirmDialog(
                     _('Are you sure you want to delete "%s"? This action cannot be undone.').format(previewText),
@@ -1400,13 +1284,11 @@ class ClipboardPopup extends St.BoxLayout {
         const symbol = event.get_key_symbol();
         const searchHasFocus = this._searchEntry.clutter_text.has_key_focus();
         
-        // Escape - ALWAYS close
         if (symbol === Clutter.KEY_Escape) {
             this._extension.hidePopup();
             return Clutter.EVENT_STOP;
         }
         
-        // Up/Down - ALWAYS navigate (even in search, moves selection)
         if (symbol === Clutter.KEY_Up || symbol === Clutter.KEY_KP_Up) {
             if (this._selectedIndex > 0) {
                 this._selectedIndex--;
@@ -1425,17 +1307,14 @@ class ClipboardPopup extends St.BoxLayout {
             return Clutter.EVENT_STOP;
         }
         
-        // Enter - ALWAYS paste selected
         if (symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) {
             this._pasteSelected();
             return Clutter.EVENT_STOP;
         }
         
-        // Check for Alt modifier (MOD1_MASK) - these work regardless of search focus
         const hasAlt = event.get_state() & Clutter.ModifierType.MOD1_MASK;
         
         if (hasAlt) {
-            // Alt+P - toggle pin
             if (symbol === Clutter.KEY_p || symbol === Clutter.KEY_P) {
                 this._isPinned = !this._isPinned;
                 if (this._isPinned) {
@@ -1447,7 +1326,6 @@ class ClipboardPopup extends St.BoxLayout {
                 return Clutter.EVENT_STOP;
             }
             
-            // Alt+T - toggle plain text mode
             if (symbol === Clutter.KEY_t || symbol === Clutter.KEY_T) {
                 this._plainTextMode = !this._plainTextMode;
                 if (this._plainTextMode) {
@@ -1459,7 +1337,6 @@ class ClipboardPopup extends St.BoxLayout {
                 return Clutter.EVENT_STOP;
             }
             
-            // Alt+F - toggle favorite
             if (symbol === Clutter.KEY_f || symbol === Clutter.KEY_F) {
                 if (this._items.length > 0 && this._selectedIndex < this._items.length) {
                     this._database.toggleFavorite(this._items[this._selectedIndex].id);
@@ -1469,7 +1346,6 @@ class ClipboardPopup extends St.BoxLayout {
                 return Clutter.EVENT_STOP;
             }
             
-            // Alt+D - delete item
             if (symbol === Clutter.KEY_d || symbol === Clutter.KEY_D) {
                 if (this._items.length > 0 && this._selectedIndex < this._items.length) {
                     const item = this._items[this._selectedIndex];
@@ -1488,7 +1364,6 @@ class ClipboardPopup extends St.BoxLayout {
             }
         }
         
-        // Delete key - also delete item (works even when search has focus, no modifier needed)
         if (symbol === Clutter.KEY_Delete) {
             if (this._items.length > 0 && this._selectedIndex < this._items.length) {
                 const item = this._items[this._selectedIndex];
@@ -1505,9 +1380,7 @@ class ClipboardPopup extends St.BoxLayout {
             return Clutter.EVENT_STOP;
         }
         
-        // These only work when search doesn't have focus (to allow typing)
         if (!searchHasFocus) {
-            // 1-9 - quick paste (only without Alt modifier to not conflict with shortcuts)
             if (!hasAlt && symbol >= Clutter.KEY_1 && symbol <= Clutter.KEY_9) {
                 const index = symbol - Clutter.KEY_1;
                 if (index < this._items.length) {
@@ -1517,14 +1390,11 @@ class ClipboardPopup extends St.BoxLayout {
                 return Clutter.EVENT_STOP;
             }
             
-            // Auto-focus search: Forward printable characters to search entry
             const unicode = event.get_key_unicode();
             if (unicode && unicode.match(/^[a-zA-Z0-9\s\-_\.@#$%&*()+=\[\]{}|\\:;"'<>,?/~`]$/)) {
-                // Focus search entry and insert the character
                 this._searchEntry.grab_key_focus();
                 const currentText = this._searchEntry.get_text();
                 this._searchEntry.set_text(currentText + unicode);
-                // Move cursor to end
                 this._searchEntry.clutter_text.set_cursor_position(-1);
                 return Clutter.EVENT_STOP;
             }
@@ -1534,7 +1404,6 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     _scrollToSelected() {
-        // Scroll to make selected item visible
         const children = this._itemsBox.get_children();
         if (this._selectedIndex >= 0 && this._selectedIndex < children.length) {
             const child = children[this._selectedIndex];
@@ -1555,5 +1424,3 @@ class ClipboardPopup extends St.BoxLayout {
         }
     }
 });
-
-

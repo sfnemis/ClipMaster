@@ -1,7 +1,6 @@
-/**
- * ClipMaster - Simple XOR Encryption Helper
- * Lightweight encryption for GNOME Shell
- * SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * ClipMaster - XOR Encryption
+ * License: GPL-2.0-or-later
  */
 
 import GLib from 'gi://GLib';
@@ -12,7 +11,6 @@ export class SimpleEncryption {
     }
     
     _generateKey() {
-        // Generate a random 32-character key
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
         let key = '';
         for (let i = 0; i < 32; i++) {
@@ -34,7 +32,6 @@ export class SimpleEncryption {
             result += String.fromCharCode(charCode);
         }
         
-        // Convert to base64 for safe storage
         return GLib.base64_encode(new TextEncoder().encode(result));
     }
     
@@ -42,7 +39,6 @@ export class SimpleEncryption {
         if (!encryptedText) return '';
         
         try {
-            // Decode from base64
             const decoded = new TextDecoder().decode(GLib.base64_decode(encryptedText));
             
             let result = '';
@@ -57,8 +53,3 @@ export class SimpleEncryption {
         }
     }
 }
-
-
-
-
-

@@ -1,23 +1,8 @@
-/**
+/*
  * ClipMaster - GNOME Shell Extension
- * A powerful clipboard manager with history, favorites, lists, and more.
  * 
- * Copyright (C) 2025 SFN <sfnemis@github.com>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2025 SFN
+ * License: GPL-2.0-or-later
  */
 
 import GLib from 'gi://GLib';
@@ -27,10 +12,8 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-// Import modules
 import { SignalManager, ValidationUtils } from './src/Util/Utils.js';
 import { setDebugMode, debugLog } from './src/Util/Constants.js';
 import { ClipboardDatabase } from './src/Manager/Database.js';
@@ -43,11 +26,8 @@ export default class ClipMasterExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         this._extensionPath = this.path;
-        
-        // Use SignalManager for proper signal lifecycle management
         this._signalManager = new SignalManager();
         
-        // Setup debug mode from settings
         setDebugMode(this._settings.get_boolean('debug-mode'));
         this._signalManager.connect(
             this._settings,
@@ -56,7 +36,6 @@ export default class ClipMasterExtension extends Extension {
             'debug-mode-changed'
         );
         
-        // Initialize database with settings for encryption support
         const storagePath = this._settings.get_string('storage-path');
         this._database = new ClipboardDatabase(
             storagePath || null, 
@@ -64,7 +43,6 @@ export default class ClipMasterExtension extends Extension {
             (title, message) => Main.notify(title, message)
         );
         
-        // Initialize clipboard monitor
         this._monitor = new ClipboardMonitor(
             this._settings,
             this._database,
@@ -72,7 +50,6 @@ export default class ClipMasterExtension extends Extension {
         );
         this._monitor.start();
         
-        // Create popup
         this._popup = new ClipboardPopup(this);
         this._popup.set_size(450, 550);
         this._popup.set_position(100, 100);
@@ -84,61 +61,49 @@ export default class ClipMasterExtension extends Extension {
             trackFullscreen: true
         });
         
-        // Create panel indicator
         if (this._settings.get_boolean('show-indicator')) {
             this._indicator = new ClipMasterIndicator(this);
             Main.panel.addToStatusArea('clipmaster', this._indicator);
         }
         
-        // Bind keyboard shortcuts
         this._bindShortcuts();
-        
-        // Apply stylesheet
         this._loadStylesheet();
         
         log('ClipMaster extension enabled');
     }
     
     disable() {
-        // Unbind shortcuts
         this._unbindShortcuts();
         
-        // Stop monitor
         if (this._monitor) {
             this._monitor.stop();
             this._monitor = null;
         }
         
-        // Destroy popup
         if (this._popup) {
             Main.layoutManager.removeChrome(this._popup);
             this._popup.destroy();
             this._popup = null;
         }
         
-        // Destroy indicator
         if (this._indicator) {
             this._indicator.destroy();
             this._indicator = null;
         }
         
-        // Unload stylesheet
         this._unloadStylesheet();
         
-        // Save database before shutdown
         if (this._database) {
             this._database.destroy();
             this._database = null;
         }
         
-        // Disconnect all signals using SignalManager
         if (this._signalManager) {
             this._signalManager.disconnectAll();
             this._signalManager = null;
         }
         
         setDebugMode(false);
-        
         this._settings = null;
         
         log('ClipMaster extension disabled');
@@ -262,7 +227,7 @@ export default class ClipMasterExtension extends Extension {
                     }
                 }
             } catch (e) {
-                // Use center position
+                // fallback to center
             }
             
             posX = ValidationUtils.validateNumber(posX, 0, 10000, 100);

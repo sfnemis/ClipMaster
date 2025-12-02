@@ -1,7 +1,6 @@
-/**
- * ClipMaster - Clipboard Database
- * JSON file storage with debounced save and encryption
- * SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * ClipMaster - Database Manager
+ * License: GPL-2.0-or-later
  */
 
 import GLib from 'gi://GLib';
@@ -464,8 +463,3 @@ export class ClipboardDatabase {
         return stats;
     }
 }
-
-
-
-
-
