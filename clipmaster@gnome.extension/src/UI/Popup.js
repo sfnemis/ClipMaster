@@ -156,7 +156,7 @@ class ClipboardPopup extends St.BoxLayout {
         
         const headerIcon = new St.Icon({
             gicon: Gio.icon_new_for_string(
-                this._extension._extensionPath + '/icons/clipmaster-symbolic.svg'
+                this._extension._extensionPath + '/assets/icons/clipmaster-symbolic.svg'
             ),
             style_class: 'clipmaster-header-icon',
             icon_size: 18
