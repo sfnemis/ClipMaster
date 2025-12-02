@@ -9,13 +9,13 @@
 </p>
 
 <p align="center">
-  <a href="#features">Features</a> •
-  <a href="#themes">Themes</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#usage">Usage</a> •
-  <a href="#keyboard-shortcuts">Shortcuts</a> •
-  <a href="#configuration">Configuration</a> •
-  <a href="#screenshots">Screenshots</a>
+  <a href="#-features">Features</a> •
+  <a href="#-themes">Themes</a> •
+  <a href="#-installation">Installation</a> •
+  <a href="#-usage">Usage</a> •
+  <a href="#️-keyboard-shortcuts">Shortcuts</a> •
+  <a href="#️-configuration">Configuration</a> •
+  <a href="#️-screenshots">Screenshots</a>
 </p>
 
 <p align="center">
