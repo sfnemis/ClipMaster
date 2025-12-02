@@ -13,7 +13,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import { ItemType } from './constants.js';
+import { ItemType } from '../Util/Constants.js';
 
 export const ClipMasterIndicator = GObject.registerClass(
 class ClipMasterIndicator extends PanelMenu.Button {
@@ -115,6 +115,7 @@ class ClipMasterIndicator extends PanelMenu.Button {
         });
     }
 });
+
 
 
 

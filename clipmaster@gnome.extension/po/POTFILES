@@ -1,0 +1,9 @@
+# List of source files containing translatable strings
+extension.js
+prefs.js
+src/Manager/Database.js
+src/Manager/ClipboardMonitor.js
+src/UI/Indicator.js
+src/UI/Popup.js
+src/Util/Constants.js
+

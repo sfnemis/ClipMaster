@@ -9,9 +9,9 @@ import Gio from 'gi://Gio';
 
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import { TimeoutManager, FileUtils, HashUtils } from './utils.js';
-import { ItemType, debugLog } from './constants.js';
-import { SimpleEncryption } from './encryption.js';
+import { TimeoutManager, FileUtils, HashUtils } from '../Util/Utils.js';
+import { ItemType, debugLog } from '../Util/Constants.js';
+import { SimpleEncryption } from '../Util/Encryption.js';
 
 export class ClipboardDatabase {
     constructor(storagePath, settings, onNotification = null) {
@@ -464,6 +464,7 @@ export class ClipboardDatabase {
         return stats;
     }
 }
+
 
 
 

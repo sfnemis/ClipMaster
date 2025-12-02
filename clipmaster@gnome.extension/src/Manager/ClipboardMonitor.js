@@ -9,8 +9,8 @@ import Gio from 'gi://Gio';
 import St from 'gi://St';
 import Meta from 'gi://Meta';
 
-import { SignalManager, TimeoutManager, SettingsCache, HashUtils, ValidationUtils } from './utils.js';
-import { ItemType, debugLog } from './constants.js';
+import { SignalManager, TimeoutManager, SettingsCache, HashUtils, ValidationUtils } from '../Util/Utils.js';
+import { ItemType, debugLog } from '../Util/Constants.js';
 
 export class ClipboardMonitor {
     constructor(settings, database, onNewItem) {
@@ -714,6 +714,7 @@ export class ClipboardMonitor {
         }
     }
 }
+
 
 
 

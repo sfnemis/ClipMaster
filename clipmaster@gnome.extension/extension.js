@@ -31,12 +31,12 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 // Import modules
-import { SignalManager, ValidationUtils } from './utils.js';
-import { setDebugMode, debugLog } from './constants.js';
-import { ClipboardDatabase } from './database.js';
-import { ClipboardMonitor } from './monitor.js';
-import { ClipboardPopup } from './popup.js';
-import { ClipMasterIndicator } from './indicator.js';
+import { SignalManager, ValidationUtils } from './src/Util/Utils.js';
+import { setDebugMode, debugLog } from './src/Util/Constants.js';
+import { ClipboardDatabase } from './src/Manager/Database.js';
+import { ClipboardMonitor } from './src/Manager/ClipboardMonitor.js';
+import { ClipboardPopup } from './src/UI/Popup.js';
+import { ClipMasterIndicator } from './src/UI/Indicator.js';
 
 
 export default class ClipMasterExtension extends Extension {
@@ -169,7 +169,7 @@ export default class ClipMasterExtension extends Extension {
     
     _loadStylesheet() {
         const stylesheetPath = GLib.build_filenamev([
-            this.path, 'stylesheet.css'
+            this.path, 'assets', 'stylesheet.css'
         ]);
         
         const file = Gio.File.new_for_path(stylesheetPath);

@@ -18,8 +18,8 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import { SignalManager, TimeoutManager } from './utils.js';
-import { ItemType, debugLog } from './constants.js';
+import { SignalManager, TimeoutManager } from '../Util/Utils.js';
+import { ItemType, debugLog } from '../Util/Constants.js';
 
 export const ClipboardPopup = GObject.registerClass(
 class ClipboardPopup extends St.BoxLayout {
