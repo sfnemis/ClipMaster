@@ -34,3 +34,8 @@ Thumbs.db
 PERFORMANCE_ANALYSIS.md
 EXTENSIONS_GNOME_ORG_DESCRIPTION*.md
 
+# Log files
+*.log
+
+# Thumbnail temp directory
+clipmaster-thumbnails/

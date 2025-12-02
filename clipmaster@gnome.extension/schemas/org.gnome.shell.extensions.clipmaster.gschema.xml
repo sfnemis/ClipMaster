@@ -95,7 +95,7 @@
     
     <key name="max-db-size-mb" type="i">
       <default>50</default>
-      <range min="10" max="500"/>
+      <range min="1" max="500"/>
       <summary>Maximum database size in MB</summary>
       <description>Maximum total size of clipboard database in megabytes</description>
     </key>

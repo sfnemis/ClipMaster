@@ -28,7 +28,6 @@ import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import Pango from 'gi://Pango';
-import GdkPixbuf from 'gi://GdkPixbuf';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -134,16 +133,22 @@ class SimpleEncryption {
 // Clipboard Database - JSON file storage (Optimized with debounced save + encryption)
 // ============================================================================
 class ClipboardDatabase {
-    constructor(storagePath, settings) {
+    constructor(storagePath, settings, onNotification = null) {
         this._storagePath = storagePath || GLib.build_filenamev([
             GLib.get_user_data_dir(), 'clipmaster', 'clipboard.json'
         ]);
         this._settings = settings;
+        this._onNotification = onNotification; // Callback for notifications
         
         this._items = [];
         this._lists = [];
         this._nextId = 1;
         this._isDirty = false;
+        
+        // Track last notification time to avoid spam
+        this._lastWarningTime = 0;
+        this._warningCooldownMs = 60000; // 1 minute between warnings
+        this._isCleaning = false; // Prevent recursive cleanup calls
         
         // Use TimeoutManager for debounced saves
         this._timeoutManager = new TimeoutManager();
@@ -238,10 +243,144 @@ class ClipboardDatabase {
             // Use FileUtils for saving
             if (FileUtils.saveTextFile(this._storagePath, jsonStr)) {
                 this._isDirty = false;
+                
+                // Check database size after saving
+                this._checkDatabaseSize();
             }
         } catch (e) {
             log(`ClipMaster: Error saving database: ${e.message}`);
         }
+    }
+    
+    /**
+     * Get current database file size in bytes
+     * @returns {number} File size in bytes, or 0 if file doesn't exist
+     */
+    getFileSize() {
+        try {
+            const file = Gio.File.new_for_path(this._storagePath);
+            if (!file.query_exists(null)) {
+                return 0;
+            }
+            
+            const info = file.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, null);
+            return info.get_size();
+        } catch (e) {
+            log(`ClipMaster: Error getting file size: ${e.message}`);
+            return 0;
+        }
+    }
+    
+    /**
+     * Check database size and enforce limit if needed
+     * Shows warning at 90% and auto-cleans at 100%
+     */
+    _checkDatabaseSize() {
+        if (!this._settings || this._isCleaning) return; // Prevent recursive calls
+        
+        try {
+            const maxSizeMB = this._settings.get_int('max-db-size-mb');
+            if (maxSizeMB <= 0) return; // No limit set
+            
+            const maxSizeBytes = maxSizeMB * 1024 * 1024;
+            const currentSizeBytes = this.getFileSize();
+            
+            if (currentSizeBytes <= 0) return; // File doesn't exist or error
+            
+            const usagePercent = (currentSizeBytes / maxSizeBytes) * 100;
+            
+            // Check if we're at or over 100% - auto-clean
+            if (currentSizeBytes >= maxSizeBytes) {
+                this._isCleaning = true;
+                try {
+                    const cleaned = this._enforceDatabaseSizeLimit(maxSizeBytes);
+                    if (cleaned > 0 && this._onNotification) {
+                        this._onNotification(
+                            _('Database Size Limit Reached'),
+                            _(`Database reached ${maxSizeMB}MB. Removed ${cleaned} oldest item(s) to free space.`)
+                        );
+                    }
+                } finally {
+                    this._isCleaning = false;
+                }
+            }
+            // Check if we're at 90% - show warning (with cooldown)
+            else if (usagePercent >= 90) {
+                const now = Date.now();
+                if (now - this._lastWarningTime > this._warningCooldownMs) {
+                    this._lastWarningTime = now;
+                    if (this._onNotification) {
+                        const remainingMB = ((maxSizeBytes - currentSizeBytes) / (1024 * 1024)).toFixed(1);
+                        this._onNotification(
+                            _('Database Size Warning'),
+                            _(`Database is ${usagePercent.toFixed(0)}% full (${remainingMB}MB remaining). Old items will be automatically removed when limit is reached.`)
+                        );
+                    }
+                }
+            }
+        } catch (e) {
+            log(`ClipMaster: Error checking database size: ${e.message}`);
+            this._isCleaning = false; // Reset flag on error
+        }
+    }
+    
+    /**
+     * Enforce database size limit by removing oldest non-favorite items
+     * @param {number} maxSizeBytes - Maximum size in bytes
+     * @returns {number} Number of items removed
+     */
+    _enforceDatabaseSizeLimit(maxSizeBytes) {
+        let removedCount = 0;
+        
+        // Keep favorites, sort non-favorites by creation date (oldest first)
+        const favorites = this._items.filter(i => i.isFavorite);
+        let nonFavorites = this._items.filter(i => !i.isFavorite);
+        
+        // Sort by creation date (oldest first)
+        nonFavorites.sort((a, b) => (a.created || 0) - (b.created || 0));
+        
+        // Try to reduce size by removing oldest items
+        while (nonFavorites.length > 0) {
+            // Calculate current size
+            const testItems = [...favorites, ...nonFavorites];
+            const testData = {
+                items: testItems,
+                lists: this._lists,
+                nextId: this._nextId
+            };
+            
+            let testJsonStr = JSON.stringify(testData, null, 2);
+            if (this._encryption) {
+                testJsonStr = 'ENC:' + this._encryption.encrypt(testJsonStr);
+            }
+            
+            const testSize = new TextEncoder().encode(testJsonStr).length;
+            
+            // If we're under the limit, we're done
+            if (testSize < maxSizeBytes * 0.95) { // Leave 5% buffer
+                break;
+            }
+            
+            // Remove oldest non-favorite item
+            nonFavorites.shift();
+            removedCount++;
+            
+            // Safety limit - don't remove all items
+            if (removedCount > 1000) {
+                log('ClipMaster: Safety limit reached while cleaning database');
+                break;
+            }
+        }
+        
+        // Update items list
+        this._items = [...favorites, ...nonFavorites];
+        
+        // Save if we removed items
+        if (removedCount > 0) {
+            this._saveImmediate(); // Force immediate save after cleanup
+        }
+        
+        return removedCount;
     }
     
     // Clean up method to be called when extension is disabled
@@ -685,6 +824,28 @@ class ClipboardMonitor {
     
     _checkClipboard() {
         debugLog(`Checking clipboard...`);
+        
+        // IMPORTANT: Check for images FIRST, before checking for text
+        // This ensures that when both image and text (like file path) are available,
+        // we prioritize the image. This fixes the issue where image viewers copy
+        // both the file path (as text) and the image data, and we were only
+        // capturing the text.
+        // Always check for images first (even if trackImages is false, we still check
+        // to prevent text from being captured when image is available)
+        debugLog(`Checking for image first (before text check)...`);
+        this._checkForImageWithCallback('CLIPBOARD', (imageFound) => {
+            debugLog(`Image check callback: imageFound=${imageFound}, trackImages=${this._cachedSettings.trackImages}`);
+            if (!imageFound) {
+                // No image found, proceed with text check
+                debugLog(`No image found, proceeding with text check...`);
+                this._checkClipboardText();
+            } else {
+                debugLog(`Image found and processed, skipping text check`);
+            }
+        });
+    }
+    
+    _checkClipboardText() {
         // Check for text
         this._clipboard.get_text(St.ClipboardType.CLIPBOARD, (clipboard, text) => {
             debugLog(`Got text from clipboard: "${text ? text.substring(0, 50) : 'null'}"`);
@@ -707,9 +868,6 @@ class ClipboardMonitor {
                 // Same content but skip-duplicates is OFF - process anyway
                 debugLog(`Same content but skip-duplicates=OFF, processing anyway...`);
                 this._processText(text, 'CLIPBOARD');
-            } else if (!text && this._cachedSettings.trackImages) {
-                // No text, check for image
-                this._checkForImage('CLIPBOARD');
             } else {
                 debugLog(`Same content or null, skipping (skipDuplicates=${skipDuplicates})`);
             }
@@ -779,12 +937,19 @@ class ClipboardMonitor {
     }
     
     _checkForImage(selectionType = 'CLIPBOARD') {
+        this._checkForImageWithCallback(selectionType, null);
+    }
+    
+    _checkForImageWithCallback(selectionType = 'CLIPBOARD', callback = null) {
+        debugLog(`_checkForImageWithCallback called (selectionType=${selectionType})`);
+        
         // Cancel any pending image check
         this._cancelImageCheck();
         
         // Detect Wayland vs X11
         const isWayland = GLib.getenv('XDG_SESSION_TYPE') === 'wayland';
         const clipTool = isWayland ? 'wl-paste' : 'xclip';
+        debugLog(`Using clipboard tool: ${clipTool} (Wayland=${isWayland})`);
         
         // First check if there's an image in clipboard using MIME type check
         let checkCmd, getCmd;
@@ -798,6 +963,8 @@ class ClipboardMonitor {
             getCmd = ['xclip', '-selection', selection, '-o', '-t', 'image/png'];
         }
         
+        debugLog(`Running command to check image types: ${checkCmd.join(' ')}`);
+        
         try {
             // Check if image type is available
             const checkProc = Gio.Subprocess.new(
@@ -808,24 +975,42 @@ class ClipboardMonitor {
             checkProc.communicate_utf8_async(null, null, (proc, result) => {
                 try {
                     const [, stdout, stderr] = proc.communicate_utf8_finish(result);
+                    debugLog(`Image type check result - stdout length: ${stdout ? stdout.length : 0}, stderr: ${stderr || 'none'}`);
+                    if (stdout) {
+                        debugLog(`Available clipboard types: ${stdout.substring(0, 200)}`);
+                    }
                     
                     // Check if image MIME type is available
                     if (stdout && (stdout.includes('image/png') || 
                                    stdout.includes('image/jpeg') || 
-                                   stdout.includes('image/gif'))) {
-                        // Get the actual image data
-                        this._fetchImageFromClipboard(isWayland, selectionType);
+                                   stdout.includes('image/gif') ||
+                                   stdout.includes('image/jpg'))) {
+                        debugLog(`✓ Image MIME type detected in clipboard, fetching image data...`);
+                        // Get the actual image data - pass callback to know when done
+                        this._fetchImageFromClipboard(isWayland, selectionType, callback);
+                    } else {
+                        debugLog(`✗ No image MIME type found in clipboard types`);
+                        if (callback) {
+                            callback(false); // No image found
+                        }
                     }
                 } catch (e) {
-                    // Silently fail - clipboard tool might not be available
+                    debugLog(`Image check error: ${e.message}`);
+                    if (callback) {
+                        callback(false); // Error, assume no image
+                    }
                 }
             });
         } catch (e) {
             log(`ClipMaster: Image check error: ${e.message}`);
+            debugLog(`Failed to create image check subprocess: ${e.message}`);
+            if (callback) {
+                callback(false); // Error, assume no image
+            }
         }
     }
     
-    _fetchImageFromClipboard(isWayland, selectionType = 'CLIPBOARD') {
+    _fetchImageFromClipboard(isWayland, selectionType = 'CLIPBOARD', callback = null) {
         const maxSize = this._cachedSettings.maxImageSize;
         
         // Create temp file for image
@@ -850,6 +1035,8 @@ class ClipboardMonitor {
             this._imageCheckProcess = proc;
             
             proc.wait_async(null, (proc, result) => {
+                let imageSuccessfullyAdded = false;
+                
                 try {
                     proc.wait_finish(result);
                     
@@ -873,45 +1060,45 @@ class ClipboardMonitor {
                                     if (hash !== this._lastImageHash) {
                                         this._lastImageHash = hash;
                                         
-                                        // Store image as base64
-                                        const base64 = GLib.base64_encode(contents);
-                                        
-                                        // Save to images directory
-                                        const imagesDir = GLib.build_filenamev([
-                                            GLib.get_user_data_dir(), 'clipmaster', 'images'
-                                        ]);
-                                        GLib.mkdir_with_parents(imagesDir, 0o755);
-                                        
-                                        const imagePath = GLib.build_filenamev([
-                                            imagesDir, `${timestamp}.png`
-                                        ]);
-                                        
-                                        // Copy to permanent location
-                                        const destFile = Gio.File.new_for_path(imagePath);
-                                        file.copy(destFile, Gio.FileCopyFlags.OVERWRITE, null, null);
-                                        
-                                        // Add to database
-                                        const item = {
-                                            type: ItemType.IMAGE,
-                                            content: imagePath,
-                                            plainText: `[Image ${timestamp}]`,
-                                            preview: `Image (${Math.round(size / 1024)}KB)`,
-                                            imageFormat: 'png',
-                                            metadata: {
-                                                size: size,
-                                                path: imagePath,
-                                                hash: hash
+                                        // Only save image if trackImages is enabled
+                                        if (this._cachedSettings.trackImages) {
+                                            // Store image as base64 in JSON database (not as separate file)
+                                            const base64 = GLib.base64_encode(contents);
+                                            
+                                            // Add to database with base64 content
+                                            const item = {
+                                                type: ItemType.IMAGE,
+                                                content: base64, // Store base64 directly in JSON
+                                                plainText: `[Image ${timestamp}]`,
+                                                preview: `Image (${Math.round(size / 1024)}KB)`,
+                                                imageFormat: 'png',
+                                                metadata: {
+                                                    size: size,
+                                                    hash: hash,
+                                                    storedAs: 'base64' // Mark as base64 storage
+                                                }
+                                            };
+                                            
+                                            const itemId = this._database.addItem(item);
+                                            this._database.enforceLimit(this._cachedSettings.historySize);
+                                            
+                                            if (this._onNewItem) {
+                                                this._onNewItem(itemId);
                                             }
-                                        };
-                                        
-                                        const itemId = this._database.addItem(item);
-                                        this._database.enforceLimit(this._cachedSettings.historySize);
-                                        
-                                        if (this._onNewItem) {
-                                            this._onNewItem(itemId);
+                                            
+                                            imageSuccessfullyAdded = true;
+                                            debugLog(`Image successfully added to history as base64`);
+                                        } else {
+                                            debugLog(`Image found but trackImages=false, skipping save (but preventing text capture)`);
+                                            imageSuccessfullyAdded = true; // Still return true to prevent text capture
                                         }
+                                    } else {
+                                        debugLog(`Image duplicate detected, skipping`);
+                                        imageSuccessfullyAdded = true; // Still return true to prevent text capture
                                     }
                                 }
+                            } else {
+                                debugLog(`Image too large (${size} bytes > ${maxSize} bytes), skipping`);
                             }
                             
                             // Clean up temp file
@@ -921,29 +1108,64 @@ class ClipboardMonitor {
                                 // Ignore cleanup errors
                             }
                         }
+                    } else {
+                        debugLog(`Image fetch process failed`);
                     }
                 } catch (e) {
                     log(`ClipMaster: Image fetch error: ${e.message}`);
                 }
                 
                 this._imageCheckProcess = null;
+                
+                // Call callback with result
+                if (callback) {
+                    callback(imageSuccessfullyAdded);
+                }
             });
         } catch (e) {
             log(`ClipMaster: Image subprocess error: ${e.message}`);
+            if (callback) {
+                callback(false);
+            }
         }
     }
     
     
     _processText(text, selectionType = 'CLIPBOARD') {
-        if (!ValidationUtils.isValidText(text, 1)) return;
+        debugLog(`_processText called with text: "${text ? text.substring(0, 100) : 'null'}"`);
+        
+        if (!ValidationUtils.isValidText(text, 1)) {
+            debugLog(`_processText: Invalid text, returning`);
+            return;
+        }
         
         if (text.length > this._cachedSettings.maxItemSize) {
             text = text.substring(0, this._cachedSettings.maxItemSize);
         }
         
+        const trimmed = text.trim();
+        debugLog(`_processText: trimmed="${trimmed.substring(0, 100)}", trackImages=${this._cachedSettings.trackImages}`);
+        
+        // Check if text is a file path that points to an image file
+        // This handles the case where image viewers copy file path instead of image data
+        if (this._cachedSettings.trackImages) {
+            debugLog(`trackImages is true, checking if text is image file path...`);
+            const isImagePath = this._isImageFilePath(trimmed);
+            debugLog(`_isImageFilePath returned: ${isImagePath}`);
+            
+            if (isImagePath) {
+                debugLog(`✓ Text appears to be an image file path: ${trimmed}`);
+                this._processImageFile(trimmed, selectionType);
+                return; // Don't process as text
+            } else {
+                debugLog(`✗ Text is NOT an image file path, processing as text`);
+            }
+        } else {
+            debugLog(`trackImages is false, skipping image file path check`);
+        }
+        
         // Detect content type
         let type = ItemType.TEXT;
-        const trimmed = text.trim();
         
         if (trimmed.match(/^https?:\/\//i)) {
             type = ItemType.URL;
@@ -973,6 +1195,164 @@ class ClipboardMonitor {
         }
     }
     
+    /**
+     * Check if text is a file path pointing to an image file
+     * @param {string} text - Text to check
+     * @returns {boolean} True if it's an image file path
+     */
+    _isImageFilePath(text) {
+        debugLog(`_isImageFilePath called with: "${text}"`);
+        
+        if (!text || text.length < 3) {
+            debugLog(`_isImageFilePath: Text too short or null`);
+            return false;
+        }
+        
+        // Check if it looks like a file path (starts with / or ~, or contains /)
+        const looksLikePath = text.startsWith('/') || 
+                             text.startsWith('~/') || 
+                             text.startsWith('./') ||
+                             (text.includes('/') && !text.includes('://'));
+        
+        debugLog(`_isImageFilePath: looksLikePath=${looksLikePath}`);
+        
+        if (!looksLikePath) {
+            debugLog(`_isImageFilePath: Does not look like a file path`);
+            return false;
+        }
+        
+        // Expand ~ to home directory
+        let filePath = text;
+        if (text.startsWith('~/')) {
+            filePath = GLib.build_filenamev([GLib.get_home_dir(), text.substring(2)]);
+        }
+        
+        // Check if file exists
+        const file = Gio.File.new_for_path(filePath);
+        if (!file.query_exists(null)) {
+            debugLog(`File does not exist: ${filePath}`);
+            return false;
+        }
+        
+        // Check file extension for image types
+        const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.ico', '.tiff', '.tif'];
+        const lowerText = text.toLowerCase();
+        const hasImageExtension = imageExtensions.some(ext => lowerText.endsWith(ext));
+        
+        if (hasImageExtension) {
+            debugLog(`File has image extension: ${filePath}`);
+            return true;
+        }
+        
+        // Also check MIME type if available
+        try {
+            const info = file.query_info('standard::content-type', Gio.FileQueryInfoFlags.NONE, null);
+            const mimeType = info.get_content_type();
+            if (mimeType && mimeType.startsWith('image/')) {
+                debugLog(`File has image MIME type: ${mimeType}`);
+                return true;
+            }
+        } catch (e) {
+            // Ignore MIME type check errors
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Process an image file path - read the file and save as image
+     * @param {string} filePath - Path to image file
+     * @param {string} selectionType - CLIPBOARD or PRIMARY
+     */
+    _processImageFile(filePath, selectionType = 'CLIPBOARD') {
+        // Expand ~ to home directory
+        let fullPath = filePath;
+        if (filePath.startsWith('~/')) {
+            fullPath = GLib.build_filenamev([GLib.get_home_dir(), filePath.substring(2)]);
+        }
+        
+        const file = Gio.File.new_for_path(fullPath);
+        if (!file.query_exists(null)) {
+            debugLog(`Image file does not exist: ${fullPath}`);
+            return;
+        }
+        
+        try {
+            const info = file.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, null);
+            const size = info.get_size();
+            const maxSize = this._cachedSettings.maxImageSize;
+            
+            if (size > maxSize) {
+                debugLog(`Image file too large: ${size} bytes > ${maxSize} bytes`);
+                return;
+            }
+            
+            if (size === 0) {
+                debugLog(`Image file is empty: ${fullPath}`);
+                return;
+            }
+            
+            // Read file contents
+            const [success, contents] = file.load_contents(null);
+            if (!success) {
+                debugLog(`Failed to read image file: ${fullPath}`);
+                return;
+            }
+            
+            // Generate hash for deduplication
+            const hash = HashUtils.hashImageData(contents);
+            
+            // Use global hash for both CLIPBOARD and PRIMARY to prevent duplicates
+            if (hash === this._lastImageHash) {
+                debugLog(`Image duplicate detected (hash match), skipping`);
+                return;
+            }
+            
+            this._lastImageHash = hash;
+            
+            // Store image as base64 in JSON database (not as separate file)
+            const timestamp = Date.now();
+            const base64 = GLib.base64_encode(contents);
+            
+            // Determine image format from extension
+            const originalExt = fullPath.substring(fullPath.lastIndexOf('.'));
+            const ext = originalExt.toLowerCase();
+            let imageFormat = 'png';
+            if (ext === '.jpg' || ext === '.jpeg') imageFormat = 'jpeg';
+            else if (ext === '.gif') imageFormat = 'gif';
+            else if (ext === '.webp') imageFormat = 'webp';
+            else if (ext === '.bmp') imageFormat = 'bmp';
+            else if (ext === '.svg') imageFormat = 'svg';
+            
+            // Add to database with base64 content
+            const item = {
+                type: ItemType.IMAGE,
+                content: base64, // Store base64 directly in JSON
+                plainText: `[Image from ${GLib.path_get_basename(fullPath)}]`,
+                preview: `Image (${Math.round(size / 1024)}KB)`,
+                imageFormat: imageFormat,
+                metadata: {
+                    size: size,
+                    originalPath: fullPath,
+                    hash: hash,
+                    storedAs: 'base64' // Mark as base64 storage
+                }
+            };
+            
+            const itemId = this._database.addItem(item);
+            this._database.enforceLimit(this._cachedSettings.historySize);
+            
+            debugLog(`Image file successfully processed and saved as base64 in JSON`);
+            
+            if (this._onNewItem) {
+                this._onNewItem(itemId);
+            }
+        } catch (e) {
+            log(`ClipMaster: Error processing image file: ${e.message}`);
+            debugLog(`Error processing image file ${fullPath}: ${e.message}`);
+        }
+    }
+    
     copyToClipboard(text, asPlainText = false) {
         if (asPlainText) {
             // Strip any formatting
@@ -986,7 +1366,8 @@ class ClipboardMonitor {
         this._clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
     }
     
-    copyImageToClipboard(imagePath) {
+    copyImageToClipboard(imageContent) {
+        // imageContent can be either a file path (old format) or base64 string (new format)
         // Use wl-copy/xclip to copy image back to clipboard
         // IMPORTANT: Only copy to CLIPBOARD, NOT to PRIMARY selection
         // This prevents duplicate entries when Track Primary Selection is enabled
@@ -994,22 +1375,82 @@ class ClipboardMonitor {
         const isWayland = GLib.getenv('XDG_SESSION_TYPE') === 'wayland';
         
         try {
+            // Check if content is base64 (starts with data: or is a long base64 string)
+            // or if it's a file path (contains /)
+            let imageData = null;
+            let isBase64 = false;
+            
+            if (imageContent.includes('/') && !imageContent.startsWith('data:')) {
+                // It's a file path (old format) - read from file
+                const file = Gio.File.new_for_path(imageContent);
+                if (file.query_exists(null)) {
+                    const [, contents] = file.load_contents(null);
+                    imageData = contents;
+                } else {
+                    log(`ClipMaster: Image file not found: ${imageContent}`);
+                    return;
+                }
+            } else {
+                // It's base64 (new format) - decode it
+                isBase64 = true;
+                try {
+                    imageData = GLib.base64_decode(imageContent);
+                } catch (e) {
+                    log(`ClipMaster: Error decoding base64 image: ${e.message}`);
+                    return;
+                }
+            }
+            
+            // Write to temporary file for wl-copy/xclip
+            const tempDir = GLib.get_tmp_dir();
+            const tempPath = GLib.build_filenamev([tempDir, `clipmaster_temp_${Date.now()}.png`]);
+            const tempFile = Gio.File.new_for_path(tempPath);
+            tempFile.replace_contents(
+                imageData,
+                null,
+                false,
+                Gio.FileCreateFlags.REPLACE_DESTINATION,
+                null
+            );
+            
             if (isWayland) {
                 // wl-copy reads from stdin - copy to CLIPBOARD only
                 const procClipboard = Gio.Subprocess.new(
-                    ['bash', '-c', `cat "${imagePath}" | wl-copy --type image/png`],
+                    ['bash', '-c', `cat "${tempPath}" | wl-copy --type image/png`],
                     Gio.SubprocessFlags.NONE
                 );
-                procClipboard.wait_async(null, null);
+                procClipboard.wait_async(null, (proc, result) => {
+                    try {
+                        proc.wait_finish(result);
+                    } catch (e) {
+                        // Ignore
+                    }
+                    // Clean up temp file
+                    try {
+                        tempFile.delete(null);
+                    } catch (e) {
+                        // Ignore
+                    }
+                });
             } else {
                 // X11 - copy to CLIPBOARD only (not PRIMARY)
-                // We don't copy to PRIMARY to avoid duplicate entries
-                // PRIMARY selection tracking is for manual user selections only
                 const procClipboard = Gio.Subprocess.new(
-                    ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i', imagePath],
+                    ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i', tempPath],
                     Gio.SubprocessFlags.NONE
                 );
-                procClipboard.wait_async(null, null);
+                procClipboard.wait_async(null, (proc, result) => {
+                    try {
+                        proc.wait_finish(result);
+                    } catch (e) {
+                        // Ignore
+                    }
+                    // Clean up temp file
+                    try {
+                        tempFile.delete(null);
+                    } catch (e) {
+                        // Ignore
+                    }
+                });
             }
         } catch (e) {
             log(`ClipMaster: Error copying image to clipboard: ${e.message}`);
@@ -1500,11 +1941,21 @@ class ClipboardPopup extends St.BoxLayout {
                 can_focus: false
             });
             deleteButton.connect('clicked', () => {
-                debugLog(`Deleting list: ${list.name} (ID: ${list.id})`);
-                this._database.deleteList(list.id);
-                this._loadItems();
+                const listName = list.name;
                 menu.close();
-                Main.notify('ClipMaster', _('List deleted'));
+                // Delay dialog opening to allow menu to fully dispose
+                this._timeoutManager.add(GLib.PRIORITY_DEFAULT, 100, () => {
+                    this._showConfirmDialog(
+                        _('Are you sure you want to delete the list "%s"? This action cannot be undone.').format(listName),
+                        () => {
+                            debugLog(`Deleting list: ${listName} (ID: ${list.id})`);
+                            this._database.deleteList(list.id);
+                            this._loadItems();
+                            Main.notify('ClipMaster', _('List deleted'));
+                        }
+                    );
+                    return GLib.SOURCE_REMOVE;
+                }, 'confirm-dialog-delay-list');
                 return Clutter.EVENT_STOP;
             });
             
@@ -1584,8 +2035,10 @@ class ClipboardPopup extends St.BoxLayout {
     _stopDrag() {
         this._dragging = false;
         // Use SignalManager to disconnect drag signals
-        this._signalManager.disconnect('drag-motion');
-        this._signalManager.disconnect('drag-release');
+        if (this._signalManager) {
+            this._signalManager.disconnect('drag-motion');
+            this._signalManager.disconnect('drag-release');
+        }
     }
     
     _connectSignals() {
@@ -1600,7 +2053,9 @@ class ClipboardPopup extends St.BoxLayout {
     _removeModalOverlay() {
         this._stopDrag();
         // Use SignalManager to disconnect click outside handler
-        this._signalManager.disconnect('click-outside-handler');
+        if (this._signalManager) {
+            this._signalManager.disconnect('click-outside-handler');
+        }
     }
     
     _setupClickOutside() {
@@ -1612,50 +2067,153 @@ class ClipboardPopup extends St.BoxLayout {
             global.stage,
             'button-press-event',
             (actor, event) => {
-            if (!this.visible || !this._isShowing) {
-                return Clutter.EVENT_PROPAGATE;
-            }
-            
-            // Grace period: ignore clicks within 1000ms of showing popup (increased)
-            const timeSinceShow = Date.now() - this._showTime;
-            if (timeSinceShow < 1000) {
-                debugLog(`Ignoring click during grace period (${timeSinceShow}ms since show)`);
-                return Clutter.EVENT_PROPAGATE;
-            }
-            
-            // If pinned, don't close on outside click
-            if (this._isPinned) {
-                debugLog(`Popup is pinned, ignoring outside click`);
-                return Clutter.EVENT_PROPAGATE;
-            }
-            
+            // Safety check: ensure popup is still valid and not disposed
             try {
-                const [clickX, clickY] = event.get_coords();
-                const [popupX, popupY] = this.get_position();
-                const [popupW, popupH] = this.get_size();
-                
-                debugLog(`Click at (${clickX}, ${clickY}), popup at (${popupX}, ${popupY}), size (${popupW}, ${popupH})`);
-                
-                // Check if click is INSIDE popup - if so, let it through
-                const isInside = clickX >= popupX && clickX <= popupX + popupW &&
-                                 clickY >= popupY && clickY <= popupY + popupH;
-                
-                if (isInside) {
-                    debugLog('Click is inside popup, allowing');
-                    // Click is inside popup, let it propagate to popup elements
+                // Check if popup is still valid by trying to access a property
+                // If disposed, this will throw an error and we'll catch it
+                if (!this || this._signalManager === null) {
+                    // Popup is being destroyed, disconnect handler
                     return Clutter.EVENT_PROPAGATE;
-                } else {
-                    debugLog('Click is outside popup, closing');
-                    // Click is outside popup, close it
-                    this._extension.hidePopup();
-                    return Clutter.EVENT_STOP;  // Stop propagation to prevent other handlers
+                }
+                
+                // Use try-catch for property access in case object is disposed
+                let isVisible, isShowing;
+                try {
+                    isVisible = this.visible;
+                    isShowing = this._isShowing;
+                } catch (e) {
+                    // Object is disposed, disconnect handler and return
+                    debugLog('Popup is disposed, disconnecting click outside handler');
+                    this._signalManager.disconnect('click-outside-handler');
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                
+                if (!isVisible || !isShowing) {
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                
+                // Grace period: ignore clicks within 1000ms of showing popup (increased)
+                const timeSinceShow = Date.now() - this._showTime;
+                if (timeSinceShow < 1000) {
+                    debugLog(`Ignoring click during grace period (${timeSinceShow}ms since show)`);
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                
+                // If pinned, don't close on outside click
+                if (this._isPinned) {
+                    debugLog(`Popup is pinned, ignoring outside click`);
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                
+                try {
+                    const [clickX, clickY] = event.get_coords();
+                    const [popupX, popupY] = this.get_position();
+                    const [popupW, popupH] = this.get_size();
+                    
+                    debugLog(`Click at (${clickX}, ${clickY}), popup at (${popupX}, ${popupY}), size (${popupW}, ${popupH})`);
+                    
+                    // Check if click is INSIDE popup - if so, let it through
+                    const isInside = clickX >= popupX && clickX <= popupX + popupW &&
+                                     clickY >= popupY && clickY <= popupY + popupH;
+                    
+                    if (isInside) {
+                        debugLog('Click is inside popup, allowing');
+                        // Click is inside popup, let it propagate to popup elements
+                        return Clutter.EVENT_PROPAGATE;
+                    } else {
+                        debugLog('Click is outside popup, closing');
+                        // Click is outside popup, close it
+                        // Check if extension still exists
+                        if (this._extension && this._extension.hidePopup) {
+                            this._extension.hidePopup();
+                        }
+                        return Clutter.EVENT_STOP;  // Stop propagation to prevent other handlers
+                    }
+                } catch (e) {
+                    debugLog(`Click outside error: ${e.message}`);
+                    // If error occurs, disconnect handler to prevent further errors
+                    try {
+                        if (this._signalManager) {
+                            this._signalManager.disconnect('click-outside-handler');
+                        }
+                    } catch (disconnectError) {
+                        // Ignore disconnect errors
+                    }
+                    return Clutter.EVENT_PROPAGATE;
                 }
             } catch (e) {
-                debugLog(`Click outside error: ${e.message}`);
+                // Popup is disposed or invalid, disconnect handler
+                debugLog(`Click outside handler error (popup disposed?): ${e.message}`);
+                try {
+                    if (this._signalManager) {
+                        this._signalManager.disconnect('click-outside-handler');
+                    }
+                } catch (disconnectError) {
+                    // Ignore disconnect errors
+                }
                 return Clutter.EVENT_PROPAGATE;
+            }
             },
             'click-outside-handler'
         );
+    }
+    
+    /**
+     * Show confirmation dialog before deletion
+     * @param {string} message - Confirmation message
+     * @param {Function} onConfirm - Callback when user confirms
+     */
+    _showConfirmDialog(message, onConfirm) {
+        debugLog('_showConfirmDialog called');
+        try {
+            // Create modal dialog - same style as create list dialog
+            const dialog = new ModalDialog.ModalDialog({ styleClass: 'clipmaster-dialog' });
+            
+            // Create message label
+            const messageLabel = new St.Label({
+                text: message,
+                style_class: 'clipmaster-confirm-dialog-message'
+            });
+            messageLabel.clutter_text.set_line_wrap(true);
+            messageLabel.clutter_text.set_line_wrap_mode(Pango.WrapMode.WORD);
+            messageLabel.set_width(400);
+            
+            // Add message directly to dialog contentLayout
+            dialog.contentLayout.add_child(messageLabel);
+            
+            // Add buttons using addButton method (same as create list dialog)
+            dialog.addButton({
+                label: _('Cancel'),
+                action: () => {
+                    debugLog('Delete dialog cancelled');
+                    dialog.close();
+                },
+                key: Clutter.KEY_Escape
+            });
+            
+            dialog.addButton({
+                label: _('Delete'),
+                action: () => {
+                    debugLog('Delete confirmed');
+                    dialog.close();
+                    if (onConfirm) {
+                        onConfirm();
+                    }
+                },
+                default: true
+            });
+            
+            // Show dialog (same as create list dialog - no Meta.get_current_time())
+            debugLog('Opening delete confirmation dialog...');
+            dialog.open();
+        } catch (e) {
+            log(`ClipMaster: Error showing confirm dialog: ${e.message}`);
+            debugLog(`Confirm dialog error: ${e.message}`);
+            // If dialog fails, just execute the action directly
+            if (onConfirm) {
+                onConfirm();
+            }
+        }
     }
     
     _setFilter(listId, type = null) {
@@ -1736,6 +2294,18 @@ class ClipboardPopup extends St.BoxLayout {
         }
         
         this._isShowing = false;
+        
+        // Disconnect click outside handler BEFORE removing overlay
+        // This prevents handler from trying to access disposed popup
+        try {
+            if (this._signalManager) {
+                this._signalManager.disconnect('click-outside-handler');
+                debugLog('Click outside handler disconnected');
+            }
+        } catch (e) {
+            debugLog(`Error disconnecting click outside handler: ${e.message}`);
+        }
+        
         this._removeModalOverlay();  // This also removes click outside handler
         this.visible = false;
         this.opacity = 0;  // Make fully transparent
@@ -1942,135 +2512,14 @@ class ClipboardPopup extends St.BoxLayout {
             row.add_child(spacer);
         }
         
-        // Type icon or image thumbnail
-        if (item.type === ItemType.IMAGE && item.content) {
-            // Try to show a small thumbnail for images
-            try {
-                const file = Gio.File.new_for_path(item.content);
-                if (file.query_exists(null)) {
-                    // Load image and create thumbnail
-                    try {
-                        // Use new_from_file for better compatibility (works on GNOME 42-49)
-                        const pixbuf = GdkPixbuf.Pixbuf.new_from_file(item.content);
-                        
-                        if (pixbuf) {
-                            // Scale to thumbnail size (32x32 max, maintain aspect ratio)
-                            const maxSize = 32;
-                            let width = pixbuf.get_width();
-                            let height = pixbuf.get_height();
-                            let scaledPixbuf = pixbuf;
-                            
-                            if (width > maxSize || height > maxSize) {
-                                const scale = Math.min(maxSize / width, maxSize / height);
-                                const newWidth = Math.floor(width * scale);
-                                const newHeight = Math.floor(height * scale);
-                                scaledPixbuf = pixbuf.scale_simple(
-                                    newWidth,
-                                    newHeight,
-                                    GdkPixbuf.InterpType.BILINEAR
-                                );
-                            }
-                            
-                            // Create texture from pixbuf - try multiple methods for compatibility
-                            let texture = null;
-                            
-                            // Method 1: Try St.TextureCache (GNOME 45+)
-                            try {
-                                const textureCache = St.TextureCache.get_default();
-                                if (textureCache && textureCache.load_pixbuf) {
-                                    texture = textureCache.load_pixbuf(scaledPixbuf);
-                                }
-                            } catch (e) {
-                                debugLog(`TextureCache method failed: ${e.message}`);
-                            }
-                            
-                            // Method 2: Try Clutter.Image (fallback for older GNOME)
-                            if (!texture) {
-                                try {
-                                    const clutterImage = new Clutter.Image();
-                                    const pixels = scaledPixbuf.get_pixels();
-                                    clutterImage.set_data(
-                                        pixels,
-                                        scaledPixbuf.get_colorspace(),
-                                        scaledPixbuf.get_width(),
-                                        scaledPixbuf.get_height(),
-                                        scaledPixbuf.get_rowstride(),
-                                        scaledPixbuf.get_bits_per_sample(),
-                                        scaledPixbuf.get_n_channels()
-                                    );
-                                    texture = clutterImage;
-                                } catch (e) {
-                                    debugLog(`Clutter.Image method failed: ${e.message}`);
-                                }
-                            }
-                            
-                            if (texture) {
-                                const thumbnail = new St.Bin({
-                                    width: maxSize,
-                                    height: maxSize,
-                                    style_class: 'clipmaster-item-thumbnail',
-                                    child: texture
-                                });
-                                row.add_child(thumbnail);
-                                debugLog(`Image thumbnail added for: ${item.content}`);
-                            } else {
-                                throw new Error('Failed to create texture from pixbuf');
-                            }
-                        } else {
-                            throw new Error('Failed to load pixbuf from file');
-                        }
-                    } catch (pixbufError) {
-                        debugLog(`Pixbuf error: ${pixbufError.message}`);
-                        // Fallback to file icon
-                        try {
-                            const gicon = new Gio.FileIcon({ file: file });
-                            const thumbnail = new St.Icon({
-                                gicon: gicon,
-                                icon_size: 32,
-                                style_class: 'clipmaster-item-thumbnail'
-                            });
-                            row.add_child(thumbnail);
-                        } catch (iconError) {
-                            debugLog(`Icon error: ${iconError.message}`);
-                            // Final fallback to generic icon
-                            const icon = new St.Icon({
-                                icon_name: 'image-x-generic-symbolic',
-                                icon_size: 16,
-                                style_class: 'clipmaster-item-icon'
-                            });
-                            row.add_child(icon);
-                        }
-                    }
-                } else {
-                    debugLog(`Image file not found: ${item.content}`);
-                    // Fallback to icon
-                    const icon = new St.Icon({
-                        icon_name: 'image-x-generic-symbolic',
-                        icon_size: 16,
-                        style_class: 'clipmaster-item-icon'
-                    });
-                    row.add_child(icon);
-                }
-            } catch (e) {
-                debugLog(`Image thumbnail error: ${e.message}`);
-                // Fallback to icon
-                const icon = new St.Icon({
-                    icon_name: 'image-x-generic-symbolic',
-                    icon_size: 16,
-                    style_class: 'clipmaster-item-icon'
-                });
-                row.add_child(icon);
-            }
-        } else {
-            // Regular type icon
-            const iconName = this._getTypeIcon(item.type);
-            const icon = new St.Icon({
-                icon_name: iconName,
-                icon_size: 16,
-                style_class: 'clipmaster-item-icon'
-            });
-            row.add_child(icon);
-        }
+        // Type icon (simple icon for all types including images)
+        const iconName = this._getTypeIcon(item.type);
+        const icon = new St.Icon({
+            icon_name: iconName,
+            icon_size: 16,
+            style_class: 'clipmaster-item-icon'
+        });
+        row.add_child(icon);
         
         // Content box
         const contentBox = new St.BoxLayout({
@@ -2304,8 +2753,20 @@ class ClipboardPopup extends St.BoxLayout {
         
         // Delete
         menu.addAction(_('Delete'), () => {
-            this._database.deleteItem(item.id);
-            this._loadItems();
+            const itemPreview = item.preview || item.plainText || _('this item');
+            const previewText = itemPreview.length > 50 ? itemPreview.substring(0, 50) + '...' : itemPreview;
+            menu.close();
+            // Delay dialog opening to allow menu to fully dispose
+            this._timeoutManager.add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._showConfirmDialog(
+                    _('Are you sure you want to delete "%s"? This action cannot be undone.').format(previewText),
+                    () => {
+                        this._database.deleteItem(item.id);
+                        this._loadItems();
+                    }
+                );
+                return GLib.SOURCE_REMOVE;
+            }, 'confirm-dialog-delay');
         });
         
         Main.uiGroup.add_child(menu.actor);
@@ -2404,8 +2865,16 @@ class ClipboardPopup extends St.BoxLayout {
         // Delete - delete item (works even when search has focus)
         if (symbol === Clutter.KEY_Delete) {
             if (this._items.length > 0 && this._selectedIndex < this._items.length) {
-                this._database.deleteItem(this._items[this._selectedIndex].id);
-                this._loadItems();
+                const item = this._items[this._selectedIndex];
+                const itemPreview = item.preview || item.plainText || _('this item');
+                const previewText = itemPreview.length > 50 ? itemPreview.substring(0, 50) + '...' : itemPreview;
+                this._showConfirmDialog(
+                    _('Are you sure you want to delete "%s"? This action cannot be undone.').format(previewText),
+                    () => {
+                        this._database.deleteItem(item.id);
+                        this._loadItems();
+                    }
+                );
             }
             return Clutter.EVENT_STOP;
         }
@@ -2611,7 +3080,11 @@ export default class ClipMasterExtension extends Extension {
         
         // Initialize database with settings for encryption support
         const storagePath = this._settings.get_string('storage-path');
-        this._database = new ClipboardDatabase(storagePath || null, this._settings);
+        this._database = new ClipboardDatabase(
+            storagePath || null, 
+            this._settings,
+            (title, message) => Main.notify(title, message) // Notification callback
+        );
         
         // Initialize clipboard monitor
         this._monitor = new ClipboardMonitor(

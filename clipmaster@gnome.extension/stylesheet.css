@@ -247,17 +247,6 @@
     color: #8c8fa1;
 }
 
-.clipmaster-item-thumbnail {
-    border-radius: 6px;
-    background-color: #313244;
-    min-width: 32px;
-    min-height: 32px;
-}
-
-.clipmaster-popup.light .clipmaster-item-thumbnail {
-    background-color: #ccd0da;
-}
-
 .clipmaster-item-content {
     spacing: 4px;
 }
@@ -365,7 +354,7 @@
 .clipmaster-footer-text {
     font-size: 11px;
     color: #a6adc8;
-    font-family: "SF Pro", "Cantarell", sans-serif;
+    font-family: "Cantarell", sans-serif;
     letter-spacing: 0.3px;
 }
 
@@ -410,6 +399,23 @@
     border-color: #89b4fa;
 }
 
+/* Confirmation Dialog */
+.clipmaster-confirm-dialog-content {
+    padding: 20px;
+    min-width: 400px;
+}
+
+.clipmaster-confirm-dialog-message {
+    font-size: 14px;
+    color: #cdd6f4;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.clipmaster-popup.light .clipmaster-confirm-dialog-message {
+    color: #4c4f69;
+}
+
 /* ============================================
    THEME SYSTEM - 6 Themes
    ============================================ */
@@ -440,7 +446,6 @@
 .clipmaster-popup.theme-catppuccin .clipmaster-item.selected * { color: #1e1e2e !important; }
 .clipmaster-popup.theme-catppuccin .clipmaster-item-number { color: #6c7086; }
 .clipmaster-popup.theme-catppuccin .clipmaster-item-icon { color: #6c7086; }
-.clipmaster-popup.theme-catppuccin .clipmaster-item-thumbnail { background-color: #313244; }
 .clipmaster-popup.theme-catppuccin .clipmaster-item-title { color: #cdd6f4; }
 .clipmaster-popup.theme-catppuccin .clipmaster-item-preview { color: #bac2de; }
 .clipmaster-popup.theme-catppuccin .clipmaster-item-fav { color: #f9e2af; }
@@ -477,7 +482,6 @@
 .clipmaster-popup.theme-dracula .clipmaster-item.selected * { color: #282a36 !important; }
 .clipmaster-popup.theme-dracula .clipmaster-item-number { color: #6272a4; }
 .clipmaster-popup.theme-dracula .clipmaster-item-icon { color: #6272a4; }
-.clipmaster-popup.theme-dracula .clipmaster-item-thumbnail { background-color: #44475a; }
 .clipmaster-popup.theme-dracula .clipmaster-item-title { color: #f8f8f2; }
 .clipmaster-popup.theme-dracula .clipmaster-item-preview { color: #e2e2dc; }
 .clipmaster-popup.theme-dracula .clipmaster-item-fav { color: #ffb86c; }
@@ -514,7 +518,6 @@
 .clipmaster-popup.theme-nord .clipmaster-item.selected * { color: #2e3440 !important; }
 .clipmaster-popup.theme-nord .clipmaster-item-number { color: #4c566a; }
 .clipmaster-popup.theme-nord .clipmaster-item-icon { color: #4c566a; }
-.clipmaster-popup.theme-nord .clipmaster-item-thumbnail { background-color: #3b4252; }
 .clipmaster-popup.theme-nord .clipmaster-item-title { color: #eceff4; }
 .clipmaster-popup.theme-nord .clipmaster-item-preview { color: #d8dee9; }
 .clipmaster-popup.theme-nord .clipmaster-item-fav { color: #ebcb8b; }
@@ -551,7 +554,6 @@
 .clipmaster-popup.theme-gruvbox .clipmaster-item.selected * { color: #282828 !important; }
 .clipmaster-popup.theme-gruvbox .clipmaster-item-number { color: #928374; }
 .clipmaster-popup.theme-gruvbox .clipmaster-item-icon { color: #928374; }
-.clipmaster-popup.theme-gruvbox .clipmaster-item-thumbnail { background-color: #504945; }
 .clipmaster-popup.theme-gruvbox .clipmaster-item-title { color: #ebdbb2; }
 .clipmaster-popup.theme-gruvbox .clipmaster-item-preview { color: #d5c4a1; }
 .clipmaster-popup.theme-gruvbox .clipmaster-item-fav { color: #fabd2f; }
@@ -588,7 +590,6 @@
 .clipmaster-popup.theme-onedark .clipmaster-item.selected * { color: #282c34 !important; }
 .clipmaster-popup.theme-onedark .clipmaster-item-number { color: #5c6370; }
 .clipmaster-popup.theme-onedark .clipmaster-item-icon { color: #5c6370; }
-.clipmaster-popup.theme-onedark .clipmaster-item-thumbnail { background-color: #3e4451; }
 .clipmaster-popup.theme-onedark .clipmaster-item-title { color: #abb2bf; }
 .clipmaster-popup.theme-onedark .clipmaster-item-preview { color: #98a0b0; }
 .clipmaster-popup.theme-onedark .clipmaster-item-fav { color: #e5c07b; }
@@ -625,7 +626,6 @@
 .clipmaster-popup.theme-adwaita .clipmaster-item.selected * { color: #ffffff !important; }
 .clipmaster-popup.theme-adwaita .clipmaster-item-number { color: #9b9b9b; }
 .clipmaster-popup.theme-adwaita .clipmaster-item-icon { color: #9b9b9b; }
-.clipmaster-popup.theme-adwaita .clipmaster-item-thumbnail { background-color: #3d3d3d; }
 .clipmaster-popup.theme-adwaita .clipmaster-item-title { color: #ffffff; }
 .clipmaster-popup.theme-adwaita .clipmaster-item-preview { color: #d5d5d5; }
 .clipmaster-popup.theme-adwaita .clipmaster-item-fav { color: #f6a32d; }
@@ -662,7 +662,6 @@
 .clipmaster-popup.theme-monokai .clipmaster-item.selected * { color: #272822 !important; }
 .clipmaster-popup.theme-monokai .clipmaster-item-number { color: #75715e; }
 .clipmaster-popup.theme-monokai .clipmaster-item-icon { color: #75715e; }
-.clipmaster-popup.theme-monokai .clipmaster-item-thumbnail { background-color: #49483e; }
 .clipmaster-popup.theme-monokai .clipmaster-item-title { color: #f8f8f2; }
 .clipmaster-popup.theme-monokai .clipmaster-item-preview { color: #e6db74; }
 .clipmaster-popup.theme-monokai .clipmaster-item-fav { color: #f92672; }
@@ -699,7 +698,6 @@
 .clipmaster-popup.theme-solarized .clipmaster-item.selected * { color: #002b36 !important; }
 .clipmaster-popup.theme-solarized .clipmaster-item-number { color: #586e75; }
 .clipmaster-popup.theme-solarized .clipmaster-item-icon { color: #586e75; }
-.clipmaster-popup.theme-solarized .clipmaster-item-thumbnail { background-color: #073642; }
 .clipmaster-popup.theme-solarized .clipmaster-item-title { color: #fdf6e3; }
 .clipmaster-popup.theme-solarized .clipmaster-item-preview { color: #eee8d5; }
 .clipmaster-popup.theme-solarized .clipmaster-item-fav { color: #b58900; }
@@ -736,7 +734,6 @@
 .clipmaster-popup.theme-tokyonight .clipmaster-item.selected * { color: #1a1b26 !important; }
 .clipmaster-popup.theme-tokyonight .clipmaster-item-number { color: #565f89; }
 .clipmaster-popup.theme-tokyonight .clipmaster-item-icon { color: #565f89; }
-.clipmaster-popup.theme-tokyonight .clipmaster-item-thumbnail { background-color: #2f3549; }
 .clipmaster-popup.theme-tokyonight .clipmaster-item-title { color: #c0caf5; }
 .clipmaster-popup.theme-tokyonight .clipmaster-item-preview { color: #a9b1d6; }
 .clipmaster-popup.theme-tokyonight .clipmaster-item-fav { color: #e0af68; }
@@ -773,7 +770,6 @@
 .clipmaster-popup.theme-rosepine .clipmaster-item.selected * { color: #191724 !important; }
 .clipmaster-popup.theme-rosepine .clipmaster-item-number { color: #6e6a86; }
 .clipmaster-popup.theme-rosepine .clipmaster-item-icon { color: #6e6a86; }
-.clipmaster-popup.theme-rosepine .clipmaster-item-thumbnail { background-color: #26233a; }
 .clipmaster-popup.theme-rosepine .clipmaster-item-title { color: #e0def4; }
 .clipmaster-popup.theme-rosepine .clipmaster-item-preview { color: #c4a7e7; }
 .clipmaster-popup.theme-rosepine .clipmaster-item-fav { color: #f6c177; }
@@ -810,7 +806,6 @@
 .clipmaster-popup.theme-material .clipmaster-item.selected * { color: #212121 !important; }
 .clipmaster-popup.theme-material .clipmaster-item-number { color: #757575; }
 .clipmaster-popup.theme-material .clipmaster-item-icon { color: #757575; }
-.clipmaster-popup.theme-material .clipmaster-item-thumbnail { background-color: #424242; }
 .clipmaster-popup.theme-material .clipmaster-item-title { color: #ffffff; }
 .clipmaster-popup.theme-material .clipmaster-item-preview { color: #e0e0e0; }
 .clipmaster-popup.theme-material .clipmaster-item-fav { color: #ffc107; }
@@ -847,7 +842,6 @@
 .clipmaster-popup.theme-ayu .clipmaster-item.selected * { color: #0f1419 !important; }
 .clipmaster-popup.theme-ayu .clipmaster-item-number { color: #5c6773; }
 .clipmaster-popup.theme-ayu .clipmaster-item-icon { color: #5c6773; }
-.clipmaster-popup.theme-ayu .clipmaster-item-thumbnail { background-color: #1f2329; }
 .clipmaster-popup.theme-ayu .clipmaster-item-title { color: #e6b450; }
 .clipmaster-popup.theme-ayu .clipmaster-item-preview { color: #bfbdb6; }
 .clipmaster-popup.theme-ayu .clipmaster-item-fav { color: #ffb454; }
