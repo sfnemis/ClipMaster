@@ -371,6 +371,14 @@ class ClipboardPopup extends St.BoxLayout {
         this._imageButton.connect('clicked', () => { this._setFilter(null, ItemType.IMAGE); return Clutter.EVENT_STOP; });
         filterBar.add_child(this._imageButton);
         
+        this._urlButton = new St.Button({
+            style_class: 'clipmaster-filter-button',
+            label: _('URLs'),
+            can_focus: false
+        });
+        this._urlButton.connect('clicked', () => { this._setFilter(null, ItemType.URL); return Clutter.EVENT_STOP; });
+        filterBar.add_child(this._urlButton);
+        
         // Lists dropdown
         this._listsButton = new St.Button({
             style_class: 'clipmaster-filter-button',
@@ -780,7 +788,7 @@ class ClipboardPopup extends St.BoxLayout {
         this._currentType = type;
         
         // Update button styles
-        [this._allButton, this._favButton, this._textButton, this._imageButton, this._listsButton].forEach(b => {
+        [this._allButton, this._favButton, this._textButton, this._imageButton, this._urlButton, this._listsButton].forEach(b => {
             if (b) b.remove_style_class_name('active');
         });
         
@@ -790,6 +798,8 @@ class ClipboardPopup extends St.BoxLayout {
             this._textButton.add_style_class_name('active');
         } else if (type === ItemType.IMAGE) {
             this._imageButton.add_style_class_name('active');
+        } else if (type === ItemType.URL) {
+            this._urlButton.add_style_class_name('active');
         } else if (listId !== null && listId > 0) {
             this._listsButton.add_style_class_name('active');
         } else {
