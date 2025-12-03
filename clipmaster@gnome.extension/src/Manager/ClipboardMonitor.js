@@ -142,6 +142,18 @@ export class ClipboardMonitor {
         }
     }
     
+    _createHiddenSubprocess(argv, captureOutput = false) {
+        const launcher = new Gio.SubprocessLauncher({
+            flags: captureOutput 
+                ? Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
+                : Gio.SubprocessFlags.NONE
+        });
+        
+        launcher.setenv('GIO_LAUNCHED_DESKTOP_FILE_PID', `${GLib.getpid()}`, true);
+        
+        return launcher.spawnv(argv);
+    }
+    
     _onSelectionOwnerChanged(selection, selectionType, selectionSource) {
         debugLog(`Selection owner changed, type=${selectionType}`);
         if (selectionType === Meta.SelectionType.SELECTION_CLIPBOARD) {
@@ -286,10 +298,7 @@ export class ClipboardMonitor {
         debugLog(`Running command to check image types: ${checkCmd.join(' ')}`);
         
         try {
-            const checkProc = Gio.Subprocess.new(
-                checkCmd,
-                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
-            );
+            const checkProc = this._createHiddenSubprocess(checkCmd, true);
             
             checkProc.communicate_utf8_async(null, null, (proc, result) => {
                 try {
@@ -343,10 +352,7 @@ export class ClipboardMonitor {
         }
         
         try {
-            const proc = Gio.Subprocess.new(
-                getCmd,
-                Gio.SubprocessFlags.NONE
-            );
+            const proc = this._createHiddenSubprocess(getCmd, false);
             
             this._imageCheckProcess = proc;
             
@@ -680,41 +686,23 @@ export class ClipboardMonitor {
                 null
             );
             
-            if (isWayland) {
-                const procClipboard = Gio.Subprocess.new(
-                    ['bash', '-c', `cat "${tempPath}" | wl-copy --type image/png`],
-                    Gio.SubprocessFlags.NONE
-                );
-                procClipboard.wait_async(null, (proc, result) => {
-                    try {
-                        proc.wait_finish(result);
-                    } catch (e) {
-                        // ignore
-                    }
-                    try {
-                        tempFile.delete(null);
-                    } catch (e) {
-                        // ignore
-                    }
-                });
-            } else {
-                const procClipboard = Gio.Subprocess.new(
-                    ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i', tempPath],
-                    Gio.SubprocessFlags.NONE
-                );
-                procClipboard.wait_async(null, (proc, result) => {
-                    try {
-                        proc.wait_finish(result);
-                    } catch (e) {
-                        // ignore
-                    }
-                    try {
-                        tempFile.delete(null);
-                    } catch (e) {
-                        // ignore
-                    }
-                });
-            }
+            const clipCmd = isWayland 
+                ? ['bash', '-c', `cat "${tempPath}" | wl-copy --type image/png`]
+                : ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i', tempPath];
+            
+            const procClipboard = this._createHiddenSubprocess(clipCmd, false);
+            procClipboard.wait_async(null, (proc, result) => {
+                try {
+                    proc.wait_finish(result);
+                } catch (e) {
+                    // ignore
+                }
+                try {
+                    tempFile.delete(null);
+                } catch (e) {
+                    // ignore
+                }
+            });
         } catch (e) {
             log(`ClipMaster: Error copying image to clipboard: ${e.message}`);
         }
