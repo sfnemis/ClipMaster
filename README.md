@@ -1,6 +1,6 @@
 # ClipMaster
 
-Clipboard manager for GNOME Shell 45+
+ClipMaster is a clipboard manager for GNOME Shell 45+
 
 ![Screenshot](screenshots/ClipMaster_PopUp.png)
 

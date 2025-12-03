@@ -668,7 +668,7 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
         
         const aboutRow = new Adw.ActionRow({
             title: 'ClipMaster',
-            subtitle: _('A powerful clipboard manager for GNOME\nInspired by Copy \'Em for Mac')
+            subtitle: _('ClipMaster - Clipboard manager for GNOME')
         });
         aboutGroup.add(aboutRow);
         

@@ -9,7 +9,7 @@ SOURCE_DIR="$(dirname "$(readlink -f "$0")")/$EXTENSION_UUID"
 
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║          ClipMaster GNOME Extension Installer            ║"
-echo "║   A powerful clipboard manager for GNOME 45+             ║"
+echo "║   ClipMaster - Clipboard manager for GNOME 45+           ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
