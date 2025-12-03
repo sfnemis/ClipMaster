@@ -531,6 +531,12 @@ class ClipboardPopup extends St.BoxLayout {
     _startDrag(event) {
         debugLog(`_startDrag called`);
         try {
+            // Don't start drag if not showing
+            if (!this._isShowing || !this.visible) {
+                debugLog('Not starting drag - popup not showing');
+                return;
+            }
+            
             this._dragging = true;
             [this._dragStartX, this._dragStartY] = event.get_coords();
             [this._dragStartPosX, this._dragStartPosY] = this.get_position();
@@ -550,7 +556,10 @@ class ClipboardPopup extends St.BoxLayout {
                 global.stage,
                 'motion-event',
                 (actor, motionEvent) => {
-                    if (!this._dragging) return Clutter.EVENT_PROPAGATE;
+                    // Safety check - don't block if not dragging or popup hidden
+                    if (!this._dragging || !this._isShowing || !this.visible) {
+                        return Clutter.EVENT_PROPAGATE;
+                    }
                     
                     try {
                         const [currentX, currentY] = motionEvent.get_coords();
@@ -564,7 +573,9 @@ class ClipboardPopup extends St.BoxLayout {
                         }
                     } catch (e) {
                         debugLog(`Drag motion error: ${e.message}`);
+                        return Clutter.EVENT_PROPAGATE;
                     }
+                    // Only stop event during active drag
                     return Clutter.EVENT_STOP;
                 },
                 'drag-motion'
@@ -576,7 +587,8 @@ class ClipboardPopup extends St.BoxLayout {
                 () => {
                     debugLog(`Drag released`);
                     this._stopDrag();
-                    return Clutter.EVENT_STOP;
+                    // Don't block the release event
+                    return Clutter.EVENT_PROPAGATE;
                 },
                 'drag-release'
             );
@@ -590,9 +602,13 @@ class ClipboardPopup extends St.BoxLayout {
     
     _stopDrag() {
         this._dragging = false;
-        if (this._signalManager) {
-            this._signalManager.disconnect('drag-motion');
-            this._signalManager.disconnect('drag-release');
+        try {
+            if (this._signalManager) {
+                this._signalManager.disconnect('drag-motion');
+                this._signalManager.disconnect('drag-release');
+            }
+        } catch (e) {
+            debugLog(`_stopDrag error: ${e.message}`);
         }
     }
     
@@ -606,9 +622,7 @@ class ClipboardPopup extends St.BoxLayout {
     
     _removeModalOverlay() {
         this._stopDrag();
-        if (this._signalManager) {
-            this._signalManager.disconnect('click-outside-handler');
-        }
+        // Note: click-outside-handler is now cleaned up in _cleanupAllGlobalHandlers()
     }
     
     _setupClickOutside() {
@@ -619,22 +633,21 @@ class ClipboardPopup extends St.BoxLayout {
             global.stage,
             'button-press-event',
             (actor, event) => {
+            // ALWAYS propagate if popup is not in a valid showing state
+            // This prevents blocking input when the handler hasn't been cleaned up
             try {
                 if (!this || this._signalManager === null) {
                     return Clutter.EVENT_PROPAGATE;
                 }
                 
-                let isVisible, isShowing;
-                try {
-                    isVisible = this.visible;
-                    isShowing = this._isShowing;
-                } catch (e) {
-                    debugLog('Popup is disposed, disconnecting click outside handler');
-                    this._signalManager.disconnect('click-outside-handler');
+                // Early exit checks - ALWAYS propagate if not showing
+                if (!this._isShowing || !this.visible) {
                     return Clutter.EVENT_PROPAGATE;
                 }
                 
-                if (!isVisible || !isShowing) {
+                // Also check if popup is off-screen (hidden state)
+                const [posX, posY] = this.get_position();
+                if (posX < -1000 || posY < -1000) {
                     return Clutter.EVENT_PROPAGATE;
                 }
                 
@@ -649,46 +662,27 @@ class ClipboardPopup extends St.BoxLayout {
                     return Clutter.EVENT_PROPAGATE;
                 }
                 
-                try {
-                    const [clickX, clickY] = event.get_coords();
-                    const [popupX, popupY] = this.get_position();
-                    const [popupW, popupH] = this.get_size();
-                    
-                    debugLog(`Click at (${clickX}, ${clickY}), popup at (${popupX}, ${popupY}), size (${popupW}, ${popupH})`);
-                    
-                    const isInside = clickX >= popupX && clickX <= popupX + popupW &&
-                                     clickY >= popupY && clickY <= popupY + popupH;
-                    
-                    if (isInside) {
-                        debugLog('Click is inside popup, allowing');
-                        return Clutter.EVENT_PROPAGATE;
-                    } else {
-                        debugLog('Click is outside popup, closing');
-                        if (this._extension && this._extension.hidePopup) {
-                            this._extension.hidePopup();
-                        }
-                        return Clutter.EVENT_STOP;
+                const [clickX, clickY] = event.get_coords();
+                const [popupX, popupY] = this.get_position();
+                const [popupW, popupH] = this.get_size();
+                
+                const isInside = clickX >= popupX && clickX <= popupX + popupW &&
+                                 clickY >= popupY && clickY <= popupY + popupH;
+                
+                if (isInside) {
+                    debugLog('Click is inside popup, allowing');
+                    return Clutter.EVENT_PROPAGATE;
+                } else {
+                    debugLog('Click is outside popup, closing');
+                    if (this._extension && this._extension.hidePopup) {
+                        this._extension.hidePopup();
                     }
-                } catch (e) {
-                    debugLog(`Click outside error: ${e.message}`);
-                    try {
-                        if (this._signalManager) {
-                            this._signalManager.disconnect('click-outside-handler');
-                        }
-                    } catch (disconnectError) {
-                        // ignore
-                    }
+                    // Don't block the click - let it through to the underlying window
+                    // The popup will close but the click should still register
                     return Clutter.EVENT_PROPAGATE;
                 }
             } catch (e) {
-                debugLog(`Click outside handler error (popup disposed?): ${e.message}`);
-                try {
-                    if (this._signalManager) {
-                        this._signalManager.disconnect('click-outside-handler');
-                    }
-                } catch (disconnectError) {
-                    // ignore
-                }
+                debugLog(`Click outside handler error: ${e.message}`);
                 return Clutter.EVENT_PROPAGATE;
             }
             },
@@ -816,23 +810,46 @@ class ClipboardPopup extends St.BoxLayout {
         
         this._isShowing = false;
         
-        try {
-            if (this._signalManager) {
-                this._signalManager.disconnect('click-outside-handler');
-                debugLog('Click outside handler disconnected');
-            }
-        } catch (e) {
-            debugLog(`Error disconnecting click outside handler: ${e.message}`);
-        }
+        // Clean up ALL global stage handlers to prevent input blocking
+        this._cleanupAllGlobalHandlers();
         
         this._removeModalOverlay();
         this.visible = false;
         this.opacity = 0;
         this.reactive = false;
+        
+        // Move off-screen as safety measure
+        this.set_position(-10000, -10000);
+        
         debugLog('Popup hidden');
     }
     
+    _cleanupAllGlobalHandlers() {
+        try {
+            if (this._signalManager) {
+                // Disconnect all known global stage handlers
+                this._signalManager.disconnect('click-outside-handler');
+                this._signalManager.disconnect('drag-motion');
+                this._signalManager.disconnect('drag-release');
+                debugLog('All global handlers disconnected');
+            }
+        } catch (e) {
+            debugLog(`Error disconnecting global handlers: ${e.message}`);
+        }
+        
+        // Reset dragging state
+        this._dragging = false;
+    }
+    
     vfunc_dispose() {
+        // Force cleanup regardless of pin state
+        this._isPinned = false;
+        this._isShowing = false;
+        this._dragging = false;
+        
+        // Clean up all global handlers first
+        this._cleanupAllGlobalHandlers();
+        
         if (this._signalManager) {
             this._signalManager.disconnectAll();
             this._signalManager = null;
@@ -844,7 +861,6 @@ class ClipboardPopup extends St.BoxLayout {
         }
         
         this._removeModalOverlay();
-        this._stopDrag();
         
         if (this._customStylesheet) {
             try {
@@ -860,6 +876,8 @@ class ClipboardPopup extends St.BoxLayout {
         this._settings = null;
         this._database = null;
         this._monitor = null;
+        
+        debugLog('Popup disposed - all handlers cleaned up');
         
         super.vfunc_dispose();
     }
