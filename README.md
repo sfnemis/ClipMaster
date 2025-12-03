@@ -36,6 +36,9 @@ sudo apt install wl-clipboard xclip
 
 # Arch
 sudo pacman -S wl-clipboard xclip
+
+# openSUSE Tumbleweed
+sudo zypper install wl-clipboard xclip
 ```
 
 ## Usage
