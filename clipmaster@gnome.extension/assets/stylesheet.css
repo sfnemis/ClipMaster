@@ -1,21 +1,21 @@
 /* ClipMaster - GNOME Shell Extension Stylesheet */
 
 /* ============================================
-   Main Popup Window - Dark Theme (Default)
+   Main Popup Window - Follows GNOME HIG
    ============================================ */
 .clipmaster-popup {
-    background-color: #1e1e2e;
-    border: 1px solid #45475a;
-    border-radius: 16px;
+    background-color: #242424;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
     padding: 0;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Light Theme */
 .clipmaster-popup.light {
-    background-color: #eff1f5;
-    border-color: #ccd0da;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    background-color: #fafafa;
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 /* Header */
@@ -600,41 +600,73 @@
 .clipmaster-popup.theme-onedark .clipmaster-footer { border-top-color: #3e4451; }
 .clipmaster-popup.theme-onedark .clipmaster-footer-text { color: #abb2bf; }
 
-/* Theme: Adwaita (GNOME Default) */
+/* Theme: Adwaita (GNOME Default) - Native GNOME look */
 .clipmaster-popup.theme-adwaita {
-    background-color: #242424;
-    border-color: #3d3d3d;
+    background-color: #303030;
+    border-color: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
-.clipmaster-popup.theme-adwaita .clipmaster-header { border-bottom-color: #3d3d3d; }
-.clipmaster-popup.theme-adwaita .clipmaster-drag-handle { color: #9b9b9b; }
+.clipmaster-popup.theme-adwaita.light {
+    background-color: #fafafa;
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.clipmaster-popup.theme-adwaita .clipmaster-header { border-bottom-color: rgba(255, 255, 255, 0.06); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-header { border-bottom-color: rgba(0, 0, 0, 0.06); }
+.clipmaster-popup.theme-adwaita .clipmaster-drag-handle { color: rgba(255, 255, 255, 0.5); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-drag-handle { color: rgba(0, 0, 0, 0.4); }
 .clipmaster-popup.theme-adwaita .clipmaster-header-icon { color: #3584e4; }
 .clipmaster-popup.theme-adwaita .clipmaster-title { color: #ffffff; }
+.clipmaster-popup.theme-adwaita.light .clipmaster-title { color: #303030; }
 .clipmaster-popup.theme-adwaita .clipmaster-toggle-button,
-.clipmaster-popup.theme-adwaita .clipmaster-close-button { color: #ffffff; }
+.clipmaster-popup.theme-adwaita .clipmaster-close-button { color: rgba(255, 255, 255, 0.8); border-radius: 6px; }
+.clipmaster-popup.theme-adwaita.light .clipmaster-toggle-button,
+.clipmaster-popup.theme-adwaita.light .clipmaster-close-button { color: rgba(0, 0, 0, 0.7); }
 .clipmaster-popup.theme-adwaita .clipmaster-toggle-button:hover,
-.clipmaster-popup.theme-adwaita .clipmaster-close-button:hover { background-color: #3d3d3d; }
+.clipmaster-popup.theme-adwaita .clipmaster-close-button:hover { background-color: rgba(255, 255, 255, 0.1); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-toggle-button:hover,
+.clipmaster-popup.theme-adwaita.light .clipmaster-close-button:hover { background-color: rgba(0, 0, 0, 0.06); }
 .clipmaster-popup.theme-adwaita .clipmaster-toggle-button:checked { background-color: #3584e4; color: #ffffff; }
-.clipmaster-popup.theme-adwaita .clipmaster-search { background-color: #3d3d3d; border-color: #555555; color: #ffffff; }
-.clipmaster-popup.theme-adwaita .clipmaster-search:focus { border-color: #3584e4; box-shadow: 0 0 0 2px rgba(53, 132, 228, 0.2); }
-.clipmaster-popup.theme-adwaita .clipmaster-search:hover { background-color: #555555; }
-.clipmaster-popup.theme-adwaita .clipmaster-filter-bar { border-bottom-color: #3d3d3d; }
-.clipmaster-popup.theme-adwaita .clipmaster-filter-button { color: #ffffff; }
-.clipmaster-popup.theme-adwaita .clipmaster-filter-button:hover { background-color: #3d3d3d; }
+.clipmaster-popup.theme-adwaita .clipmaster-search { background-color: rgba(255, 255, 255, 0.08); border: none; border-radius: 8px; color: #ffffff; }
+.clipmaster-popup.theme-adwaita.light .clipmaster-search { background-color: rgba(0, 0, 0, 0.04); color: #303030; }
+.clipmaster-popup.theme-adwaita .clipmaster-search:focus { background-color: rgba(255, 255, 255, 0.12); box-shadow: inset 0 0 0 2px #3584e4; }
+.clipmaster-popup.theme-adwaita.light .clipmaster-search:focus { background-color: rgba(0, 0, 0, 0.06); }
+.clipmaster-popup.theme-adwaita .clipmaster-search:hover { background-color: rgba(255, 255, 255, 0.1); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-search:hover { background-color: rgba(0, 0, 0, 0.05); }
+.clipmaster-popup.theme-adwaita .clipmaster-filter-bar { border-bottom-color: rgba(255, 255, 255, 0.06); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-filter-bar { border-bottom-color: rgba(0, 0, 0, 0.06); }
+.clipmaster-popup.theme-adwaita .clipmaster-filter-button { color: rgba(255, 255, 255, 0.7); border-radius: 6px; }
+.clipmaster-popup.theme-adwaita.light .clipmaster-filter-button { color: rgba(0, 0, 0, 0.6); }
+.clipmaster-popup.theme-adwaita .clipmaster-filter-button:hover { background-color: rgba(255, 255, 255, 0.08); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-filter-button:hover { background-color: rgba(0, 0, 0, 0.04); }
 .clipmaster-popup.theme-adwaita .clipmaster-filter-button.active { background-color: #3584e4; color: #ffffff; }
-.clipmaster-popup.theme-adwaita .clipmaster-item:hover { background-color: rgba(53, 132, 228, 0.1); }
+.clipmaster-popup.theme-adwaita .clipmaster-item { border-radius: 8px; }
+.clipmaster-popup.theme-adwaita .clipmaster-item:hover { background-color: rgba(255, 255, 255, 0.06); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-item:hover { background-color: rgba(0, 0, 0, 0.04); }
 .clipmaster-popup.theme-adwaita .clipmaster-item.selected { background-color: #3584e4; }
 .clipmaster-popup.theme-adwaita .clipmaster-item.selected * { color: #ffffff !important; }
-.clipmaster-popup.theme-adwaita .clipmaster-item-number { color: #9b9b9b; }
-.clipmaster-popup.theme-adwaita .clipmaster-item-icon { color: #9b9b9b; }
+.clipmaster-popup.theme-adwaita .clipmaster-item-number { color: rgba(255, 255, 255, 0.4); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-item-number { color: rgba(0, 0, 0, 0.35); }
+.clipmaster-popup.theme-adwaita .clipmaster-item-icon { color: rgba(255, 255, 255, 0.5); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-item-icon { color: rgba(0, 0, 0, 0.4); }
 .clipmaster-popup.theme-adwaita .clipmaster-item-title { color: #ffffff; }
-.clipmaster-popup.theme-adwaita .clipmaster-item-preview { color: #d5d5d5; }
-.clipmaster-popup.theme-adwaita .clipmaster-item-fav { color: #f6a32d; }
-.clipmaster-popup.theme-adwaita .clipmaster-item-fav-inactive { color: #9b9b9b; opacity: 0.5; }
-.clipmaster-popup.theme-adwaita .clipmaster-fav-button:hover { background-color: rgba(53, 132, 228, 0.1); }
-.clipmaster-popup.theme-adwaita .clipmaster-item-time { color: #9b9b9b; }
-.clipmaster-popup.theme-adwaita .clipmaster-empty { color: #9b9b9b; }
-.clipmaster-popup.theme-adwaita .clipmaster-footer { border-top-color: #3d3d3d; }
-.clipmaster-popup.theme-adwaita .clipmaster-footer-text { color: #ffffff; }
+.clipmaster-popup.theme-adwaita.light .clipmaster-item-title { color: #303030; }
+.clipmaster-popup.theme-adwaita .clipmaster-item-preview { color: rgba(255, 255, 255, 0.7); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-item-preview { color: rgba(0, 0, 0, 0.6); }
+.clipmaster-popup.theme-adwaita .clipmaster-item-fav { color: #f5c211; }
+.clipmaster-popup.theme-adwaita .clipmaster-item-fav-inactive { color: rgba(255, 255, 255, 0.3); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-item-fav-inactive { color: rgba(0, 0, 0, 0.25); }
+.clipmaster-popup.theme-adwaita .clipmaster-fav-button:hover { background-color: rgba(255, 255, 255, 0.08); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-fav-button:hover { background-color: rgba(0, 0, 0, 0.04); }
+.clipmaster-popup.theme-adwaita .clipmaster-item-time { color: rgba(255, 255, 255, 0.4); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-item-time { color: rgba(0, 0, 0, 0.35); }
+.clipmaster-popup.theme-adwaita .clipmaster-empty { color: rgba(255, 255, 255, 0.5); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-empty { color: rgba(0, 0, 0, 0.4); }
+.clipmaster-popup.theme-adwaita .clipmaster-footer { border-top-color: rgba(255, 255, 255, 0.06); background-color: transparent; }
+.clipmaster-popup.theme-adwaita.light .clipmaster-footer { border-top-color: rgba(0, 0, 0, 0.06); }
+.clipmaster-popup.theme-adwaita .clipmaster-footer-text { color: rgba(255, 255, 255, 0.5); }
+.clipmaster-popup.theme-adwaita.light .clipmaster-footer-text { color: rgba(0, 0, 0, 0.4); }
 
 /* Theme: Monokai */
 .clipmaster-popup.theme-monokai {

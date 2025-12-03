@@ -223,18 +223,26 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
         });
         behaviorPage.add(appearanceGroup);
         
+        // Follow system theme toggle
+        const followSystemRow = new Adw.SwitchRow({
+            title: _('Follow System Theme'),
+            subtitle: _('Automatically use Adwaita light/dark based on system preference')
+        });
+        settings.bind('follow-system-theme', followSystemRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        appearanceGroup.add(followSystemRow);
+        
         // Theme selection
         const themeRow = new Adw.ComboRow({
             title: _('Theme'),
-            subtitle: _('Choose a visual theme for the popup')
+            subtitle: _('Choose a visual theme (disabled when following system theme)')
         });
         const themeModel = new Gtk.StringList();
+        themeModel.append('Adwaita (GNOME)');
         themeModel.append('Catppuccin');
         themeModel.append('Dracula');
         themeModel.append('Nord');
         themeModel.append('Gruvbox');
         themeModel.append('One Dark');
-        themeModel.append('Adwaita');
         themeModel.append('Monokai');
         themeModel.append('Solarized Dark');
         themeModel.append('Tokyo Night');
@@ -243,14 +251,14 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
         themeModel.append('Ayu');
         themeRow.model = themeModel;
         
-        // Bind theme setting (convert between display name and internal name)
+        // Bind theme setting
         const themeMap = {
-            'catppuccin': 0,
-            'dracula': 1,
-            'nord': 2,
-            'gruvbox': 3,
-            'onedark': 4,
-            'adwaita': 5,
+            'adwaita': 0,
+            'catppuccin': 1,
+            'dracula': 2,
+            'nord': 3,
+            'gruvbox': 4,
+            'onedark': 5,
             'monokai': 6,
             'solarized': 7,
             'tokyonight': 8,
@@ -258,18 +266,22 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
             'material': 10,
             'ayu': 11
         };
-        const reverseThemeMap = ['catppuccin', 'dracula', 'nord', 'gruvbox', 'onedark', 'adwaita', 'monokai', 'solarized', 'tokyonight', 'rosepine', 'material', 'ayu'];
+        const reverseThemeMap = ['adwaita', 'catppuccin', 'dracula', 'nord', 'gruvbox', 'onedark', 'monokai', 'solarized', 'tokyonight', 'rosepine', 'material', 'ayu'];
         
         // Set initial selection
-        const currentTheme = settings.get_string('theme') || 'gruvbox';
-        themeRow.selected = themeMap[currentTheme] !== undefined ? themeMap[currentTheme] : themeMap['gruvbox'];
+        const currentTheme = settings.get_string('theme') || 'adwaita';
+        themeRow.selected = themeMap[currentTheme] !== undefined ? themeMap[currentTheme] : 0;
         
         // Connect change handler
         themeRow.connect('notify::selected', () => {
             const selectedIndex = themeRow.selected;
-            const themeValue = reverseThemeMap[selectedIndex] || 'gruvbox';
+            const themeValue = reverseThemeMap[selectedIndex] || 'adwaita';
             settings.set_string('theme', themeValue);
         });
+        
+        // Disable theme selection when following system
+        followSystemRow.bind_property('active', themeRow, 'sensitive',
+            GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.INVERT_BOOLEAN);
         
         appearanceGroup.add(themeRow);
         

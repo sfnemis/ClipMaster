@@ -64,6 +64,9 @@ class ClipboardPopup extends St.BoxLayout {
         this._signalManager = new SignalManager();
         this._timeoutManager = new TimeoutManager();
         
+        // Connect to GNOME interface settings for system theme detection
+        this._interfaceSettings = new Gio.Settings({ schema: 'org.gnome.desktop.interface' });
+        
         this._applyTheme();
         
         this._signalManager.connect(
@@ -84,6 +87,18 @@ class ClipboardPopup extends St.BoxLayout {
             () => this._applyTheme(),
             'theme-custom-changed'
         );
+        this._signalManager.connect(
+            this._settings,
+            'changed::follow-system-theme',
+            () => this._applyTheme(),
+            'follow-system-changed'
+        );
+        this._signalManager.connect(
+            this._interfaceSettings,
+            'changed::color-scheme',
+            () => this._applyTheme(),
+            'system-theme-changed'
+        );
         
         this._buildUI();
         this._connectSignals();
@@ -91,13 +106,14 @@ class ClipboardPopup extends St.BoxLayout {
     
     _applyTheme() {
         try {
+            // Remove all theme classes first
             this.remove_style_class_name('light');
+            this.remove_style_class_name('theme-adwaita');
             this.remove_style_class_name('theme-catppuccin');
             this.remove_style_class_name('theme-dracula');
             this.remove_style_class_name('theme-nord');
             this.remove_style_class_name('theme-gruvbox');
             this.remove_style_class_name('theme-onedark');
-            this.remove_style_class_name('theme-adwaita');
             this.remove_style_class_name('theme-monokai');
             this.remove_style_class_name('theme-solarized');
             this.remove_style_class_name('theme-tokyonight');
@@ -105,8 +121,11 @@ class ClipboardPopup extends St.BoxLayout {
             this.remove_style_class_name('theme-material');
             this.remove_style_class_name('theme-ayu');
             
+            const followSystem = this._settings.get_boolean('follow-system-theme');
             const customThemePath = this._settings.get_string('custom-theme-path') || '';
-            if (customThemePath) {
+            
+            // Handle custom theme file
+            if (customThemePath && !followSystem) {
                 const customFile = Gio.File.new_for_path(customThemePath);
                 if (customFile.query_exists(null)) {
                     try {
@@ -117,28 +136,32 @@ class ClipboardPopup extends St.BoxLayout {
                         const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
                         theme.load_stylesheet(customFile);
                         this._customStylesheet = customFile;
+                        return; // Custom theme takes precedence
                     } catch (e) {
                         log(`ClipMaster: Error loading custom theme: ${e.message}`);
                     }
                 }
-            } else {
-                if (this._customStylesheet) {
-                    try {
-                        const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
-                        theme.unload_stylesheet(this._customStylesheet);
-                        this._customStylesheet = null;
-                    } catch (e) {
-                        log(`ClipMaster: Error unloading custom theme: ${e.message}`);
-                    }
+            } else if (this._customStylesheet) {
+                try {
+                    const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
+                    theme.unload_stylesheet(this._customStylesheet);
+                    this._customStylesheet = null;
+                } catch (e) {
+                    log(`ClipMaster: Error unloading custom theme: ${e.message}`);
                 }
             }
             
-            if (!customThemePath) {
-                const themeName = this._settings.get_string('theme') || 'gruvbox';
+            // Detect system dark/light mode
+            let isDark = this._settings.get_boolean('dark-theme');
+            if (followSystem) {
+                const colorScheme = this._interfaceSettings.get_string('color-scheme');
+                isDark = colorScheme === 'prefer-dark';
+                this.add_style_class_name('theme-adwaita');
+            } else {
+                const themeName = this._settings.get_string('theme') || 'adwaita';
                 this.add_style_class_name(`theme-${themeName}`);
             }
             
-            const isDark = this._settings.get_boolean('dark-theme');
             if (!isDark) {
                 this.add_style_class_name('light');
             }

@@ -170,9 +170,15 @@
     </key>
     
     <key name="theme" type="s">
-      <default>'gruvbox'</default>
+      <default>'adwaita'</default>
       <summary>Theme</summary>
-      <description>Visual theme for the popup. Options: catppuccin, dracula, nord, gruvbox, onedark, adwaita, monokai, solarized, tokyonight, rosepine, material, ayu</description>
+      <description>Visual theme for the popup. Options: adwaita, catppuccin, dracula, nord, gruvbox, onedark, monokai, solarized, tokyonight, rosepine, material, ayu</description>
+    </key>
+    
+    <key name="follow-system-theme" type="b">
+      <default>true</default>
+      <summary>Follow System Theme</summary>
+      <description>Automatically switch between light and dark Adwaita based on GNOME system theme</description>
     </key>
     
     <key name="custom-theme-path" type="s">
