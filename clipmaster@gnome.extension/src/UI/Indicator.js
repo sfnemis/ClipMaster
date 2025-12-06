@@ -72,19 +72,36 @@ class ClipMasterIndicator extends PanelMenu.Button {
     }
     
     refresh() {
-        this._recentSection.removeAll();
+        // Safety check for disposed indicator
+        if (!this._recentSection || !this._extension || !this._extension._database) {
+            return;
+        }
+        
+        try {
+            this._recentSection.removeAll();
+        } catch (e) {
+            // Menu section might be disposed
+            return;
+        }
         
         const items = this._extension._database.getItems({ limit: 5 });
         
         if (items.length === 0) {
-            const emptyItem = new PopupMenu.PopupMenuItem(_('No clipboard items'), {
-                reactive: false
-            });
-            this._recentSection.addMenuItem(emptyItem);
+            try {
+                const emptyItem = new PopupMenu.PopupMenuItem(_('No clipboard items'), {
+                    reactive: false
+                });
+                this._recentSection.addMenuItem(emptyItem);
+            } catch (e) {
+                // Ignore if menu is disposed
+            }
             return;
         }
         
         items.forEach(item => {
+            // Check if we're still valid before adding each item
+            if (!this._recentSection) return;
+            
             let preview = item.preview || item.content || '';
             if (item.type === ItemType.IMAGE) {
                 preview = `🖼️ ${item.preview || 'Image'}`;
@@ -94,15 +111,22 @@ class ClipMasterIndicator extends PanelMenu.Button {
             }
             preview = preview.replace(/\n/g, ' ');
             
-            const menuItem = new PopupMenu.PopupMenuItem(preview);
-            menuItem.connect('activate', () => {
-                if (item.type === ItemType.IMAGE && item.content) {
-                    this._extension._monitor.copyImageToClipboard(item.content);
-                } else {
-                    this._extension._monitor.copyToClipboard(item.content);
-                }
-            });
-            this._recentSection.addMenuItem(menuItem);
+            try {
+                const menuItem = new PopupMenu.PopupMenuItem(preview);
+                menuItem.connect('activate', () => {
+                    // Safety check for disposed extension components
+                    if (!this._extension || !this._extension._monitor) return;
+                    
+                    if (item.type === ItemType.IMAGE && item.content) {
+                        this._extension._monitor.copyImageToClipboard(item.content);
+                    } else {
+                        this._extension._monitor.copyToClipboard(item.content);
+                    }
+                });
+                this._recentSection.addMenuItem(menuItem);
+            } catch (e) {
+                // Ignore if menu item creation fails (disposed)
+            }
         });
     }
 });

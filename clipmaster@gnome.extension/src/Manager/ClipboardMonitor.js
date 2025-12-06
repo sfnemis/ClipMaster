@@ -149,7 +149,10 @@ export class ClipboardMonitor {
                 : Gio.SubprocessFlags.NONE
         });
         
-        launcher.setenv('GIO_LAUNCHED_DESKTOP_FILE_PID', `${GLib.getpid()}`, true);
+        // Set GIO_LAUNCHED_DESKTOP_FILE_PID to prevent subprocess from appearing 
+        // in dock as "unknown application". Using timestamp since GLib.getpid() 
+        // is not available in GJS.
+        launcher.setenv('GIO_LAUNCHED_DESKTOP_FILE_PID', `${Date.now()}`, true);
         
         return launcher.spawnv(argv);
     }
