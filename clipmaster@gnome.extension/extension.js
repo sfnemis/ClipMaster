@@ -78,20 +78,30 @@ export default class ClipMasterExtension extends Extension {
         }
         
         if (this._popup) {
-            // Ensure all handlers are cleaned up before destroying
+            // Ensure all handlers are cleaned up BEFORE any destruction
             this._popup._isPinned = false; // Force unpin to allow cleanup
-            this._popup.hide();
+            this._popup._isShowing = false;
             
+            // Clean up internal state first
+            if (this._popup._dispose) {
+                this._popup._dispose();
+            }
+            
+            // Remove from chrome before destroying
             if (this._popupAddedToChrome) {
                 try {
                     Main.layoutManager.removeChrome(this._popup);
                 } catch (e) {
-                    debugLog(`disable: Error removing chrome: ${e.message}`);
+                    // Ignore removal errors during disable
                 }
                 this._popupAddedToChrome = false;
             }
             
-            this._popup.destroy();
+            try {
+                this._popup.destroy();
+            } catch (e) {
+                // Ignore destruction errors
+            }
             this._popup = null;
         }
         
@@ -194,8 +204,8 @@ export default class ClipMasterExtension extends Extension {
     }
     
     showPopup() {
-        if (!this._popup) {
-            debugLog('showPopup: No popup available');
+        if (!this._popup || this._popup._isDisposed) {
+            debugLog('showPopup: No popup available or disposed');
             return;
         }
         
@@ -284,7 +294,7 @@ export default class ClipMasterExtension extends Extension {
     
     hidePopup() {
         debugLog('hidePopup: Called');
-        if (this._popup) {
+        if (this._popup && !this._popup._isDisposed) {
             debugLog(`hidePopup: _isShowing=${this._popup._isShowing}, visible=${this._popup.visible}, _isPinned=${this._popup._isPinned}`);
             
             if (this._popup._isPinned) {
@@ -293,7 +303,12 @@ export default class ClipMasterExtension extends Extension {
             }
             
             this._popup._isShowing = false;
-            this._popup.hide();
+            
+            try {
+                this._popup.hide();
+            } catch (e) {
+                debugLog(`hidePopup: Error hiding: ${e.message}`);
+            }
             
             // Remove from chrome when hidden to prevent any input interference
             if (this._popupAddedToChrome) {
@@ -307,10 +322,14 @@ export default class ClipMasterExtension extends Extension {
             }
             
             // Move off-screen as extra safety measure
-            this._popup.set_position(-10000, -10000);
+            try {
+                this._popup.set_position(-10000, -10000);
+            } catch (e) {
+                // Ignore position errors
+            }
             debugLog('hidePopup: Popup hidden and moved off-screen');
         } else {
-            debugLog('hidePopup: No popup available');
+            debugLog('hidePopup: No popup available or disposed');
         }
     }
     

@@ -60,6 +60,7 @@ class ClipboardPopup extends St.BoxLayout {
         this._dragStartPosY = 0;
         
         this._modalOverlay = null;
+        this._isDisposed = false;
         
         this._signalManager = new SignalManager();
         this._timeoutManager = new TimeoutManager();
@@ -105,6 +106,9 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     _applyTheme() {
+        // Safety check for disposed object
+        if (this._isDisposed) return;
+        
         try {
             // Remove all theme classes first
             this.remove_style_class_name('light');
@@ -841,7 +845,11 @@ class ClipboardPopup extends St.BoxLayout {
         this._dragging = false;
     }
     
-    vfunc_dispose() {
+    _dispose() {
+        // Prevent double disposal
+        if (this._isDisposed) return;
+        this._isDisposed = true;
+        
         // Force cleanup regardless of pin state
         this._isPinned = false;
         this._isShowing = false;
@@ -850,6 +858,7 @@ class ClipboardPopup extends St.BoxLayout {
         // Clean up all global handlers first
         this._cleanupAllGlobalHandlers();
         
+        // Disconnect all signals BEFORE any destruction
         if (this._signalManager) {
             this._signalManager.disconnectAll();
             this._signalManager = null;
@@ -860,6 +869,11 @@ class ClipboardPopup extends St.BoxLayout {
             this._timeoutManager = null;
         }
         
+        // Clean up interface settings
+        if (this._interfaceSettings) {
+            this._interfaceSettings = null;
+        }
+        
         this._removeModalOverlay();
         
         if (this._customStylesheet) {
@@ -868,7 +882,7 @@ class ClipboardPopup extends St.BoxLayout {
                 theme.unload_stylesheet(this._customStylesheet);
                 this._customStylesheet = null;
             } catch (e) {
-                log(`ClipMaster: Error unloading custom theme on dispose: ${e.message}`);
+                // Ignore cleanup errors during disposal
             }
         }
         
@@ -878,16 +892,17 @@ class ClipboardPopup extends St.BoxLayout {
         this._monitor = null;
         
         debugLog('Popup disposed - all handlers cleaned up');
-        
-        super.vfunc_dispose();
     }
     
     destroy() {
-        this.vfunc_dispose();
+        this._dispose();
         super.destroy();
     }
     
     _loadItems() {
+        // Safety checks for disposed state
+        if (this._isDisposed || !this._itemsBox || !this._database) return;
+        
         this._itemsBox.destroy_all_children();
         
         const limit = this._settings.get_int('items-per-page');
@@ -1153,6 +1168,8 @@ class ClipboardPopup extends St.BoxLayout {
     }
     
     _updateSelection() {
+        if (this._isDisposed || !this._itemsBox) return;
+        
         const children = this._itemsBox.get_children();
         children.forEach((child, index) => {
             if (child._index !== undefined) {
