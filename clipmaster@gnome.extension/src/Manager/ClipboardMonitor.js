@@ -149,10 +149,15 @@ export class ClipboardMonitor {
                 : Gio.SubprocessFlags.NONE
         });
         
-        // Set GIO_LAUNCHED_DESKTOP_FILE_PID to prevent subprocess from appearing 
-        // in dock as "unknown application". Using timestamp since GLib.getpid() 
-        // is not available in GJS.
-        launcher.setenv('GIO_LAUNCHED_DESKTOP_FILE_PID', `${Date.now()}`, true);
+        // Prevent subprocess from appearing in dock as "unknown application"
+        // and suppress wl-clipboard notifications
+        launcher.unsetenv('GIO_LAUNCHED_DESKTOP_FILE');
+        launcher.unsetenv('DESKTOP_AUTOSTART_ID');
+        launcher.setenv('GIO_LAUNCHED_DESKTOP_FILE_PID', '1', true);
+        
+        // Suppress any portal/notification behavior
+        launcher.setenv('GTK_USE_PORTAL', '0', true);
+        launcher.setenv('NO_AT_BRIDGE', '1', true);
         
         return launcher.spawnv(argv);
     }
@@ -348,7 +353,7 @@ export class ClipboardMonitor {
         
         let getCmd;
         if (isWayland) {
-            getCmd = ['bash', '-c', `wl-paste --type image/png > "${tempPath}"`];
+            getCmd = ['bash', '-c', `wl-paste --type image/png > "${tempPath}" 2>/dev/null`];
         } else {
             const selection = selectionType === 'PRIMARY' ? 'primary' : 'clipboard';
             getCmd = ['bash', '-c', `xclip -selection ${selection} -o -t image/png > "${tempPath}"`];
@@ -690,7 +695,7 @@ export class ClipboardMonitor {
             );
             
             const clipCmd = isWayland 
-                ? ['bash', '-c', `cat "${tempPath}" | wl-copy --type image/png`]
+                ? ['bash', '-c', `cat "${tempPath}" | wl-copy --type image/png --once 2>/dev/null`]
                 : ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i', tempPath];
             
             const procClipboard = this._createHiddenSubprocess(clipCmd, false);
