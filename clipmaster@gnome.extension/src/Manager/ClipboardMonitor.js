@@ -316,64 +316,46 @@ export class ClipboardMonitor {
     _checkForImageWithCallback(selectionType = 'CLIPBOARD', callback = null) {
         debugLog(`_checkForImageWithCallback called (selectionType=${selectionType})`);
         
-        this._cancelImageCheck();
-        
-        const isWayland = GLib.getenv('XDG_SESSION_TYPE') === 'wayland';
-        const clipTool = isWayland ? 'wl-paste' : 'xclip';
-        debugLog(`Using clipboard tool: ${clipTool} (Wayland=${isWayland})`);
-        
-        let checkCmd, getCmd;
-        
-        if (isWayland) {
-            checkCmd = ['wl-paste', '--list-types'];
-            getCmd = ['wl-paste', '--type', 'image/png'];
-        } else {
-            const selection = selectionType === 'PRIMARY' ? 'primary' : 'clipboard';
-            checkCmd = ['xclip', '-selection', selection, '-o', '-t', 'TARGETS'];
-            getCmd = ['xclip', '-selection', selection, '-o', '-t', 'image/png'];
+        if (this._isStopped) {
+            if (callback) callback(false);
+            return;
         }
         
-        debugLog(`Running command to check image types: ${checkCmd.join(' ')}`);
+        this._cancelImageCheck();
         
+        // Use native Meta.Selection API instead of subprocess to avoid window creation
         try {
-            const checkProc = this._createHiddenSubprocess(checkCmd, true);
+            const metaSelectionType = selectionType === 'PRIMARY' 
+                ? Meta.SelectionType.SELECTION_PRIMARY 
+                : Meta.SelectionType.SELECTION_CLIPBOARD;
             
-            checkProc.communicate_utf8_async(null, null, (proc, result) => {
-                // Safety check - monitor might be stopped during async operation
-                if (this._isStopped) {
-                    debugLog(`Image check callback: Monitor stopped, ignoring`);
+            const mimetypes = this._selection.get_mimetypes(metaSelectionType);
+            debugLog(`Available MIME types from Meta.Selection: ${mimetypes ? mimetypes.join(', ') : 'none'}`);
+            
+            if (mimetypes && mimetypes.length > 0) {
+                const hasImage = mimetypes.some(mime => 
+                    mime === 'image/png' || 
+                    mime === 'image/jpeg' || 
+                    mime === 'image/jpg' ||
+                    mime === 'image/gif' ||
+                    mime === 'image/bmp' ||
+                    mime === 'image/webp'
+                );
+                
+                if (hasImage) {
+                    debugLog(`✓ Image MIME type detected via Meta.Selection`);
+                    const isWayland = GLib.getenv('XDG_SESSION_TYPE') === 'wayland';
+                    this._fetchImageFromClipboard(isWayland, selectionType, callback);
                     return;
                 }
-                
-                try {
-                    const [, stdout, stderr] = proc.communicate_utf8_finish(result);
-                    debugLog(`Image type check result - stdout length: ${stdout ? stdout.length : 0}, stderr: ${stderr || 'none'}`);
-                    if (stdout) {
-                        debugLog(`Available clipboard types: ${stdout.substring(0, 200)}`);
-                    }
-                    
-                    if (stdout && (stdout.includes('image/png') || 
-                                   stdout.includes('image/jpeg') || 
-                                   stdout.includes('image/gif') ||
-                                   stdout.includes('image/jpg'))) {
-                        debugLog(`✓ Image MIME type detected in clipboard, fetching image data...`);
-                        this._fetchImageFromClipboard(isWayland, selectionType, callback);
-                    } else {
-                        debugLog(`✗ No image MIME type found in clipboard types`);
-                        if (callback) {
-                            callback(false);
-                        }
-                    }
-                } catch (e) {
-                    debugLog(`Image check error: ${e.message}`);
-                    if (callback) {
-                        callback(false);
-                    }
-                }
-            });
+            }
+            
+            debugLog(`✗ No image MIME type found`);
+            if (callback) {
+                callback(false);
+            }
         } catch (e) {
-            log(`ClipMaster: Image check error: ${e.message}`);
-            debugLog(`Failed to create image check subprocess: ${e.message}`);
+            debugLog(`Meta.Selection check error: ${e.message}, falling back to text only`);
             if (callback) {
                 callback(false);
             }
@@ -381,10 +363,115 @@ export class ClipboardMonitor {
     }
     
     _fetchImageFromClipboard(isWayland, selectionType = 'CLIPBOARD', callback = null) {
-        const maxSize = this._cachedSettings.maxImageSize;
+        if (this._isStopped) {
+            if (callback) callback(false);
+            return;
+        }
         
-        const tempDir = GLib.get_tmp_dir();
+        const maxSize = this._cachedSettings.maxImageSize;
         const timestamp = Date.now();
+        
+        // Use Meta.Selection.transfer_async for native image fetching (no subprocess!)
+        try {
+            const metaSelectionType = selectionType === 'PRIMARY' 
+                ? Meta.SelectionType.SELECTION_PRIMARY 
+                : Meta.SelectionType.SELECTION_CLIPBOARD;
+            
+            const tempDir = GLib.get_tmp_dir();
+            const tempPath = GLib.build_filenamev([tempDir, `clipmaster_${timestamp}.png`]);
+            const tempFile = Gio.File.new_for_path(tempPath);
+            
+            const outputStream = tempFile.replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+            
+            this._selection.transfer_async(
+                metaSelectionType,
+                'image/png',
+                maxSize,
+                outputStream,
+                null,
+                (selection, result) => {
+                    let imageSuccessfullyAdded = false;
+                    
+                    try {
+                        outputStream.close(null);
+                    } catch (e) {}
+                    
+                    if (this._isStopped) {
+                        try { tempFile.delete(null); } catch (e) {}
+                        return;
+                    }
+                    
+                    try {
+                        const success = this._selection.transfer_finish(result);
+                        
+                        if (success && tempFile.query_exists(null)) {
+                            const info = tempFile.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, null);
+                            const size = info.get_size();
+                            
+                            if (size > 0 && size <= maxSize) {
+                                const [loadSuccess, contents] = tempFile.load_contents(null);
+                                if (loadSuccess) {
+                                    const hash = HashUtils.hashImageData(contents);
+                                    
+                                    if (hash !== this._lastImageHash) {
+                                        this._lastImageHash = hash;
+                                        
+                                        if (this._cachedSettings && this._cachedSettings.trackImages) {
+                                            const base64 = GLib.base64_encode(contents);
+                                            
+                                            const item = {
+                                                type: ItemType.IMAGE,
+                                                content: base64,
+                                                plainText: `[Image ${timestamp}]`,
+                                                preview: `Image (${Math.round(size / 1024)}KB)`,
+                                                imageFormat: 'png',
+                                                metadata: {
+                                                    size: size,
+                                                    hash: hash,
+                                                    storedAs: 'base64'
+                                                }
+                                            };
+                                            
+                                            if (!this._isStopped && this._database) {
+                                                const itemId = this._database.addItem(item);
+                                                this._database.enforceLimit(this._cachedSettings.historySize);
+                                                
+                                                if (this._onNewItem && !this._isStopped) {
+                                                    this._onNewItem(itemId);
+                                                }
+                                            }
+                                            
+                                            imageSuccessfullyAdded = true;
+                                            debugLog(`Image successfully added via native API`);
+                                        } else {
+                                            debugLog(`Image found but trackImages=false`);
+                                            imageSuccessfullyAdded = true;
+                                        }
+                                    } else {
+                                        debugLog(`Image duplicate detected`);
+                                        imageSuccessfullyAdded = true;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        debugLog(`Native image fetch error: ${e.message}`);
+                    }
+                    
+                    try { tempFile.delete(null); } catch (e) {}
+                    
+                    if (callback) {
+                        callback(imageSuccessfullyAdded);
+                    }
+                }
+            );
+            return;
+        } catch (e) {
+            debugLog(`Meta.Selection.transfer_async error: ${e.message}, trying subprocess fallback`);
+        }
+        
+        // Fallback to subprocess only if native API fails
+        const tempDir = GLib.get_tmp_dir();
         const tempPath = GLib.build_filenamev([tempDir, `clipmaster_${timestamp}.png`]);
         
         let getCmd;
