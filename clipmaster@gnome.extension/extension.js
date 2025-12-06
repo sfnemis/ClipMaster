@@ -174,18 +174,22 @@ export default class ClipMasterExtension extends Extension {
     
     _onNewItem(itemId) {
         // Safety check - extension might be disabled during async callback
-        if (!this._settings || !this._indicator) {
+        if (!this._settings) {
+            debugLog('_onNewItem: settings is null, skipping');
             return;
         }
         
-        this._refreshIndicator();
+        // Indicator might not exist if show-indicator is off
+        if (this._indicator) {
+            this._refreshIndicator();
+        }
         
         try {
-            if (this._settings.get_boolean('show-notification')) {
+            if (this._settings && this._settings.get_boolean('show-notification')) {
                 Main.notify('ClipMaster', _('New item added to clipboard'));
             }
         } catch (e) {
-            // Settings might be disposed
+            // Settings might be disposed - ignore
         }
     }
     

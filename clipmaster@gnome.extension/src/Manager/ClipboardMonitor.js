@@ -163,38 +163,52 @@ export class ClipboardMonitor {
     }
     
     _onSelectionOwnerChanged(selection, selectionType, selectionSource) {
+        if (this._isStopped) return;
+        
         debugLog(`Selection owner changed, type=${selectionType}`);
         if (selectionType === Meta.SelectionType.SELECTION_CLIPBOARD) {
             debugLog(`Clipboard selection changed!`);
-            this._timeoutManager.add(
-                GLib.PRIORITY_DEFAULT,
-                100,
-                () => {
-                    this._checkClipboard();
-                    return GLib.SOURCE_REMOVE;
-                },
-                'clipboard-check'
-            );
+            if (this._timeoutManager) {
+                this._timeoutManager.add(
+                    GLib.PRIORITY_DEFAULT,
+                    100,
+                    () => {
+                        if (!this._isStopped) {
+                            this._checkClipboard();
+                        }
+                        return GLib.SOURCE_REMOVE;
+                    },
+                    'clipboard-check'
+                );
+            }
         }
     }
     
     _onPrimarySelectionOwnerChanged(selection, selectionType, selectionSource) {
+        if (this._isStopped) return;
+        
         debugLog(`Primary selection owner changed, type=${selectionType}`);
         if (selectionType === Meta.SelectionType.SELECTION_PRIMARY) {
             debugLog(`Primary selection changed!`);
-            this._timeoutManager.add(
-                GLib.PRIORITY_DEFAULT,
-                100,
-                () => {
-                    this._checkPrimaryClipboard();
-                    return GLib.SOURCE_REMOVE;
-                },
-                'primary-clipboard-check'
-            );
+            if (this._timeoutManager) {
+                this._timeoutManager.add(
+                    GLib.PRIORITY_DEFAULT,
+                    100,
+                    () => {
+                        if (!this._isStopped) {
+                            this._checkPrimaryClipboard();
+                        }
+                        return GLib.SOURCE_REMOVE;
+                    },
+                    'primary-clipboard-check'
+                );
+            }
         }
     }
     
     _checkClipboard() {
+        if (this._isStopped) return;
+        
         debugLog(`Checking clipboard...`);
         debugLog(`Checking for image first (before text check)...`);
         this._checkForImageWithCallback('CLIPBOARD', (imageFound) => {
@@ -210,12 +224,20 @@ export class ClipboardMonitor {
     
     _checkClipboardText() {
         this._clipboard.get_text(St.ClipboardType.CLIPBOARD, (clipboard, text) => {
+            // Safety check - monitor might be stopped during async operation
+            if (this._isStopped) {
+                debugLog(`Clipboard text callback: Monitor stopped, ignoring`);
+                return;
+            }
+            
             debugLog(`Got text from clipboard: "${text ? text.substring(0, 50) : 'null'}"`);
             debugLog(`Last content was: "${this._lastContent ? this._lastContent.substring(0, 50) : 'null'}"`);
             
             let skipDuplicates = true;
             try {
-                skipDuplicates = this._settings.get_boolean('skip-duplicates');
+                if (this._settings) {
+                    skipDuplicates = this._settings.get_boolean('skip-duplicates');
+                }
             } catch (e) {
                 skipDuplicates = true;
             }
@@ -236,6 +258,12 @@ export class ClipboardMonitor {
     _checkPrimaryClipboard(isInitialCheck = false) {
         debugLog(`Checking primary clipboard... (isInitialCheck=${isInitialCheck})`);
         this._clipboard.get_text(St.ClipboardType.PRIMARY, (clipboard, text) => {
+            // Safety check - monitor might be stopped during async operation
+            if (this._isStopped) {
+                debugLog(`Primary clipboard callback: Monitor stopped, ignoring`);
+                return;
+            }
+            
             debugLog(`Got text from primary: "${text ? text.substring(0, 50) : 'null'}"`);
             debugLog(`Last primary content was: "${this._lastPrimaryContent ? this._lastPrimaryContent.substring(0, 50) : 'null'}"`);
             
@@ -261,7 +289,9 @@ export class ClipboardMonitor {
             
             let skipDuplicates = true;
             try {
-                skipDuplicates = this._settings.get_boolean('skip-duplicates');
+                if (this._settings) {
+                    skipDuplicates = this._settings.get_boolean('skip-duplicates');
+                }
             } catch (e) {
                 skipDuplicates = true;
             }
@@ -309,6 +339,12 @@ export class ClipboardMonitor {
             const checkProc = this._createHiddenSubprocess(checkCmd, true);
             
             checkProc.communicate_utf8_async(null, null, (proc, result) => {
+                // Safety check - monitor might be stopped during async operation
+                if (this._isStopped) {
+                    debugLog(`Image check callback: Monitor stopped, ignoring`);
+                    return;
+                }
+                
                 try {
                     const [, stdout, stderr] = proc.communicate_utf8_finish(result);
                     debugLog(`Image type check result - stdout length: ${stdout ? stdout.length : 0}, stderr: ${stderr || 'none'}`);
@@ -367,6 +403,17 @@ export class ClipboardMonitor {
             proc.wait_async(null, (proc, result) => {
                 let imageSuccessfullyAdded = false;
                 
+                // Safety check - monitor might be stopped during async operation
+                if (this._isStopped) {
+                    debugLog(`Image fetch callback: Monitor stopped, ignoring`);
+                    // Still cleanup temp file
+                    try {
+                        const file = Gio.File.new_for_path(tempPath);
+                        if (file.query_exists(null)) file.delete(null);
+                    } catch (e) {}
+                    return;
+                }
+                
                 try {
                     proc.wait_finish(result);
                     
@@ -385,7 +432,7 @@ export class ClipboardMonitor {
                                     if (hash !== this._lastImageHash) {
                                         this._lastImageHash = hash;
                                         
-                                        if (this._cachedSettings.trackImages) {
+                                        if (this._cachedSettings && this._cachedSettings.trackImages) {
                                             const base64 = GLib.base64_encode(contents);
                                             
                                             const item = {
@@ -401,11 +448,14 @@ export class ClipboardMonitor {
                                                 }
                                             };
                                             
-                                            const itemId = this._database.addItem(item);
-                                            this._database.enforceLimit(this._cachedSettings.historySize);
-                                            
-                                            if (this._onNewItem) {
-                                                this._onNewItem(itemId);
+                                            // Check again before database operation
+                                            if (!this._isStopped && this._database) {
+                                                const itemId = this._database.addItem(item);
+                                                this._database.enforceLimit(this._cachedSettings.historySize);
+                                                
+                                                if (this._onNewItem && !this._isStopped) {
+                                                    this._onNewItem(itemId);
+                                                }
                                             }
                                             
                                             imageSuccessfullyAdded = true;
@@ -451,7 +501,7 @@ export class ClipboardMonitor {
     }
     
     _processText(text, selectionType = 'CLIPBOARD') {
-        if (this._isStopped) return;
+        if (this._isStopped || !this._database) return;
         
         debugLog(`_processText called with text: "${text ? text.substring(0, 100) : 'null'}"`);
         
@@ -506,7 +556,8 @@ export class ClipboardMonitor {
         const itemId = this._database.addItem(item);
         this._database.enforceLimit(this._cachedSettings.historySize);
         
-        if (this._onNewItem) {
+        // Safety check before callback
+        if (this._onNewItem && !this._isStopped) {
             this._onNewItem(itemId);
         }
     }
@@ -566,7 +617,7 @@ export class ClipboardMonitor {
     }
     
     _processImageFile(filePath, selectionType = 'CLIPBOARD') {
-        if (this._isStopped) return;
+        if (this._isStopped || !this._database) return;
         
         let fullPath = filePath;
         if (filePath.startsWith('~/')) {
@@ -640,7 +691,8 @@ export class ClipboardMonitor {
             
             debugLog(`Image file successfully processed and saved as base64 in JSON`);
             
-            if (this._onNewItem) {
+            // Safety check before callback
+            if (this._onNewItem && !this._isStopped) {
                 this._onNewItem(itemId);
             }
         } catch (e) {
