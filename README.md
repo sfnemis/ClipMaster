@@ -23,22 +23,26 @@ cd ClipMaster
 
 Then restart GNOME Shell (log out/in on Wayland) and enable the extension.
 
-### Dependencies
+### Optional Dependencies
 
-Wayland needs `wl-clipboard`, X11 needs `xclip`:
+Only needed if you want to **paste images from clipboard history**. Text operations work without any dependencies.
 
 ```bash
 # Fedora
-sudo dnf install wl-clipboard xclip
+sudo dnf install wl-clipboard   # Wayland
+sudo dnf install xclip          # X11
 
 # Ubuntu/Debian
-sudo apt install wl-clipboard xclip
+sudo apt install wl-clipboard   # Wayland
+sudo apt install xclip          # X11
 
 # Arch
-sudo pacman -S wl-clipboard xclip
+sudo pacman -S wl-clipboard     # Wayland
+sudo pacman -S xclip            # X11
 
 # openSUSE Tumbleweed
-sudo zypper install wl-clipboard xclip
+sudo zypper install wl-clipboard  # Wayland
+sudo zypper install xclip         # X11
 ```
 
 ## Usage
