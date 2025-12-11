@@ -252,26 +252,43 @@ export default class ClipMasterExtension extends Extension {
                 300, 2000, 550
             );
             
-            const monitor = Main.layoutManager.primaryMonitor;
+            // Get cursor position first to determine which monitor to use
+            const [mouseX, mouseY] = global.get_pointer();
+            
+            // Find the monitor where the cursor is located
+            let monitor = Main.layoutManager.primaryMonitor;
+            if (mouseX !== undefined && mouseY !== undefined && 
+                !isNaN(mouseX) && !isNaN(mouseY)) {
+                for (let i = 0; i < Main.layoutManager.monitors.length; i++) {
+                    const mon = Main.layoutManager.monitors[i];
+                    if (mouseX >= mon.x && mouseX < mon.x + mon.width &&
+                        mouseY >= mon.y && mouseY < mon.y + mon.height) {
+                        monitor = mon;
+                        break;
+                    }
+                }
+            }
+            
             if (!monitor || !monitor.width || !monitor.height) {
                 log('ClipMaster: No valid monitor found');
                 this._popup._isShowing = false;
                 return;
             }
             
+            // Default to center of the current monitor
             let posX = Math.round(monitor.x + (monitor.width - popupWidth) / 2);
             let posY = Math.round(monitor.y + (monitor.height - popupHeight) / 2);
             
             try {
                 if (this._settings.get_boolean('popup-at-cursor')) {
-                    const [mouseX, mouseY] = global.get_pointer();
-                    
                     if (mouseX !== undefined && mouseY !== undefined && 
                         !isNaN(mouseX) && !isNaN(mouseY) &&
                         mouseX >= 0 && mouseY >= 0) {
+                        // Position popup centered horizontally on cursor, slightly above cursor
                         posX = Math.round(mouseX - popupWidth / 2);
                         posY = Math.round(mouseY - 50);
                         
+                        // Clamp to the monitor where the cursor is located
                         posX = Math.max(monitor.x + 10, Math.min(posX, monitor.x + monitor.width - popupWidth - 10));
                         posY = Math.max(monitor.y + 50, Math.min(posY, monitor.y + monitor.height - popupHeight - 10));
                     }
