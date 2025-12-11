@@ -19,51 +19,85 @@ export class ClipboardDatabase {
         ]);
         this._settings = settings;
         this._onNotification = onNotification;
-        
+
         this._items = [];
         this._lists = [];
         this._nextId = 1;
         this._isDirty = false;
         this._isDestroyed = false;
-        
+
         this._lastWarningTime = 0;
         this._warningCooldownMs = 60000;
         this._isCleaning = false;
-        
+
         this._timeoutManager = new TimeoutManager();
         this._saveDebounceMs = 500;
-        
+
         this._encryption = null;
         this._setupEncryption();
-        
+
         FileUtils.ensureDirectory(this._storagePath);
         this._load();
     }
-    
+
     _setupEncryption() {
         if (this._settings && this._settings.get_boolean('encrypt-database')) {
-            let key = this._settings.get_string('encryption-key');
-            
+            // Key file path: same directory as clipboard.json, named clipmaster.key
+            const keyFilePath = this._storagePath.replace(/\.json$/, '.key');
+
+            let key = null;
+
+            // Priority 1: Try to load key from .key file (survives system format)
+            try {
+                const keyFromFile = FileUtils.loadTextFile(keyFilePath);
+                if (keyFromFile && keyFromFile.trim().length >= 16) {
+                    key = keyFromFile.trim();
+                    debugLog('Encryption key loaded from key file');
+                }
+            } catch (e) {
+                // Key file doesn't exist or is unreadable
+            }
+
+            // Priority 2: Fall back to GSettings (for backward compatibility)
+            if (!key) {
+                key = this._settings.get_string('encryption-key');
+                if (key) {
+                    debugLog('Encryption key loaded from GSettings (fallback)');
+                }
+            }
+
+            // Priority 3: Generate new key if none exists
             if (!key) {
                 this._encryption = new SimpleEncryption();
                 key = this._encryption.getKey();
-                this._settings.set_string('encryption-key', key);
+                debugLog('Generated new encryption key');
             } else {
                 this._encryption = new SimpleEncryption(key);
             }
+
+            // Always save key to both locations for redundancy
+            try {
+                FileUtils.saveTextFile(keyFilePath, key);
+                debugLog('Encryption key saved to key file');
+            } catch (e) {
+                log(`ClipMaster: Could not save key file: ${e.message}`);
+            }
+
+            // Also keep in GSettings for backward compatibility
+            this._settings.set_string('encryption-key', key);
         }
     }
-    
+
     _load() {
         try {
             const jsonStr = FileUtils.loadTextFile(this._storagePath);
             if (jsonStr) {
                 let decodedStr = jsonStr;
-                
+
                 if (this._encryption && decodedStr.startsWith('ENC:')) {
                     decodedStr = this._encryption.decrypt(decodedStr.substring(4));
                 }
-                
+
                 const data = JSON.parse(decodedStr);
                 this._items = data.items || [];
                 this._lists = data.lists || [];
@@ -75,12 +109,12 @@ export class ClipboardDatabase {
             this._lists = [];
         }
     }
-    
+
     _save() {
         if (this._isDestroyed || !this._timeoutManager) return;
-        
+
         this._isDirty = true;
-        
+
         this._timeoutManager.add(
             GLib.PRIORITY_DEFAULT,
             this._saveDebounceMs,
@@ -91,30 +125,30 @@ export class ClipboardDatabase {
             'database-save'
         );
     }
-    
+
     _saveImmediate() {
         if (this._isDestroyed || !this._timeoutManager) return;
-        
+
         this._timeoutManager.remove('database-save');
         this._doSave();
     }
-    
+
     _doSave() {
         if (!this._isDirty) return;
-        
+
         try {
             const data = {
                 items: this._items,
                 lists: this._lists,
                 nextId: this._nextId
             };
-            
+
             let jsonStr = JSON.stringify(data, null, 2);
-            
+
             if (this._encryption) {
                 jsonStr = 'ENC:' + this._encryption.encrypt(jsonStr);
             }
-            
+
             if (FileUtils.saveTextFile(this._storagePath, jsonStr)) {
                 this._isDirty = false;
                 this._checkDatabaseSize();
@@ -123,14 +157,14 @@ export class ClipboardDatabase {
             log(`ClipMaster: Error saving database: ${e.message}`);
         }
     }
-    
+
     getFileSize() {
         try {
             const file = Gio.File.new_for_path(this._storagePath);
             if (!file.query_exists(null)) {
                 return 0;
             }
-            
+
             const info = file.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, null);
             return info.get_size();
         } catch (e) {
@@ -138,21 +172,21 @@ export class ClipboardDatabase {
             return 0;
         }
     }
-    
+
     _checkDatabaseSize() {
         if (!this._settings || this._isCleaning) return;
-        
+
         try {
             const maxSizeMB = this._settings.get_int('max-db-size-mb');
             if (maxSizeMB <= 0) return;
-            
+
             const maxSizeBytes = maxSizeMB * 1024 * 1024;
             const currentSizeBytes = this.getFileSize();
-            
+
             if (currentSizeBytes <= 0) return;
-            
+
             const usagePercent = (currentSizeBytes / maxSizeBytes) * 100;
-            
+
             if (currentSizeBytes >= maxSizeBytes) {
                 this._isCleaning = true;
                 try {
@@ -184,15 +218,15 @@ export class ClipboardDatabase {
             this._isCleaning = false;
         }
     }
-    
+
     _enforceDatabaseSizeLimit(maxSizeBytes) {
         let removedCount = 0;
-        
+
         const favorites = this._items.filter(i => i.isFavorite);
         let nonFavorites = this._items.filter(i => !i.isFavorite);
-        
+
         nonFavorites.sort((a, b) => (a.created || 0) - (b.created || 0));
-        
+
         while (nonFavorites.length > 0) {
             const testItems = [...favorites, ...nonFavorites];
             const testData = {
@@ -200,52 +234,52 @@ export class ClipboardDatabase {
                 lists: this._lists,
                 nextId: this._nextId
             };
-            
+
             let testJsonStr = JSON.stringify(testData, null, 2);
             if (this._encryption) {
                 testJsonStr = 'ENC:' + this._encryption.encrypt(testJsonStr);
             }
-            
+
             const testSize = new TextEncoder().encode(testJsonStr).length;
-            
+
             if (testSize < maxSizeBytes * 0.95) {
                 break;
             }
-            
+
             nonFavorites.shift();
             removedCount++;
-            
+
             if (removedCount > 1000) {
                 log('ClipMaster: Safety limit reached while cleaning database');
                 break;
             }
         }
-        
+
         this._items = [...favorites, ...nonFavorites];
-        
+
         if (removedCount > 0) {
             this._saveImmediate();
         }
-        
+
         return removedCount;
     }
-    
+
     destroy() {
         this._isDestroyed = true;
-        
+
         if (this._timeoutManager) {
             this._doSave();
             this._timeoutManager.removeAll();
             this._timeoutManager = null;
         }
     }
-    
+
     addItem(item) {
         if (this._isDestroyed) return null;
-        
+
         const contentHash = HashUtils.hashContent(item.content);
         const existing = this._items.find(i => i.contentHash === contentHash || i.hash === contentHash);
-        
+
         let skipDuplicates = true;
         try {
             if (this._settings) {
@@ -256,9 +290,9 @@ export class ClipboardDatabase {
             debugLog(`Error reading skip-duplicates: ${e.message}`);
             skipDuplicates = true;
         }
-        
+
         debugLog(`existing=${!!existing}, skipDuplicates=${skipDuplicates}`);
-        
+
         if (existing && skipDuplicates) {
             debugLog(`Skipping duplicate, updating existing item`);
             existing.lastUsed = Date.now();
@@ -267,11 +301,11 @@ export class ClipboardDatabase {
             this._save();
             return existing.id;
         }
-        
+
         debugLog(`Adding new item (existing=${!!existing}, skipDuplicates=${skipDuplicates})`);
-        
+
         const uniqueHash = skipDuplicates ? contentHash : `${contentHash}_${Date.now()}`;
-        
+
         const newItem = {
             id: this._nextId++,
             type: item.type || ItemType.TEXT,
@@ -290,12 +324,12 @@ export class ClipboardDatabase {
             imageFormat: item.imageFormat || null,
             metadata: item.metadata || null
         };
-        
+
         this._items.unshift(newItem);
         this._save();
         return newItem.id;
     }
-    
+
     _moveToTop(itemId) {
         const index = this._items.findIndex(i => i.id === itemId);
         if (index > 0) {
@@ -303,14 +337,14 @@ export class ClipboardDatabase {
             this._items.unshift(item);
         }
     }
-    
+
     getItems(options = {}) {
         let items = [...this._items];
-        
+
         if (options.type) {
             items = items.filter(i => i.type === options.type);
         }
-        
+
         if (options.listId !== undefined) {
             if (options.listId === -1) {
                 items = items.filter(i => i.isFavorite);
@@ -318,27 +352,27 @@ export class ClipboardDatabase {
                 items = items.filter(i => i.listId === options.listId);
             }
         }
-        
+
         if (options.search) {
             const query = options.search.toLowerCase();
-            items = items.filter(i => 
+            items = items.filter(i =>
                 (i.content && i.content.toLowerCase().includes(query)) ||
                 (i.plainText && i.plainText.toLowerCase().includes(query)) ||
                 (i.title && i.title.toLowerCase().includes(query))
             );
         }
-        
+
         if (options.limit) {
             items = items.slice(0, options.limit);
         }
-        
+
         return items;
     }
-    
+
     getItem(itemId) {
         return this._items.find(i => i.id === itemId);
     }
-    
+
     updateItem(itemId, updates) {
         const item = this._items.find(i => i.id === itemId);
         if (item) {
@@ -348,7 +382,7 @@ export class ClipboardDatabase {
         }
         return false;
     }
-    
+
     deleteItem(itemId) {
         const index = this._items.findIndex(i => i.id === itemId);
         if (index >= 0) {
@@ -358,7 +392,7 @@ export class ClipboardDatabase {
         }
         return false;
     }
-    
+
     toggleFavorite(itemId) {
         const item = this._items.find(i => i.id === itemId);
         if (item) {
@@ -368,7 +402,7 @@ export class ClipboardDatabase {
         }
         return false;
     }
-    
+
     clearHistory(keepFavorites = true) {
         if (keepFavorites) {
             this._items = this._items.filter(i => i.isFavorite);
@@ -377,23 +411,23 @@ export class ClipboardDatabase {
         }
         this._save();
     }
-    
+
     enforceLimit(maxItems) {
         if (this._isDestroyed) return;
-        
+
         const favorites = this._items.filter(i => i.isFavorite);
         const nonFavorites = this._items.filter(i => !i.isFavorite);
-        
+
         if (nonFavorites.length > maxItems) {
             this._items = [...favorites, ...nonFavorites.slice(0, maxItems)];
             this._save();
         }
     }
-    
+
     getLists() {
         return this._lists;
     }
-    
+
     createList(name, color = null) {
         const list = {
             id: this._lists.length > 0 ? Math.max(...this._lists.map(l => l.id)) + 1 : 1,
@@ -405,18 +439,18 @@ export class ClipboardDatabase {
         this._save();
         return list.id;
     }
-    
+
     deleteList(listId) {
         this._items.forEach(item => {
             if (item.listId === listId) {
                 item.listId = null;
             }
         });
-        
+
         this._lists = this._lists.filter(l => l.id !== listId);
         this._save();
     }
-    
+
     addItemToList(itemId, listId) {
         const item = this._items.find(i => i.id === itemId);
         if (item) {
@@ -424,7 +458,7 @@ export class ClipboardDatabase {
             this._save();
         }
     }
-    
+
     exportData() {
         return JSON.stringify({
             version: 1,
@@ -433,7 +467,7 @@ export class ClipboardDatabase {
             exported: new Date().toISOString()
         }, null, 2);
     }
-    
+
     importData(jsonString) {
         try {
             const data = JSON.parse(jsonString);
@@ -461,18 +495,18 @@ export class ClipboardDatabase {
             return false;
         }
     }
-    
+
     getStats() {
         const stats = {
             total: this._items.length,
             favorites: this._items.filter(i => i.isFavorite).length,
             byType: {}
         };
-        
+
         this._items.forEach(item => {
             stats.byType[item.type] = (stats.byType[item.type] || 0) + 1;
         });
-        
+
         return stats;
     }
 }
