@@ -686,6 +686,7 @@ export class ClipboardMonitor {
         }
         this._lastContent = text;
         this._clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
+        this._clipboard.set_text(St.ClipboardType.PRIMARY, text);
     }
 
     async copyImageToClipboard(imageContent) {
