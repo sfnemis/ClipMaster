@@ -8,6 +8,7 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
+import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
@@ -16,6 +17,7 @@ import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/
 
 import { SignalManager, ValidationUtils } from './src/Util/Utils.js';
 import { setDebugMode, debugLog } from './src/Util/Constants.js';
+import { getPasteKeySpec } from './src/Util/PasteUtils.js';
 import { ClipboardDatabase } from './src/Manager/Database.js';
 import { ClipboardMonitor } from './src/Manager/ClipboardMonitor.js';
 import { ClipboardPopup } from './src/UI/Popup.js';
@@ -27,6 +29,10 @@ export default class ClipMasterExtension extends Extension {
         this._settings = this.getSettings();
         this._extensionPath = this.path;
         this._signalManager = new SignalManager();
+        this._windowTracker = Shell.WindowTracker.get_default();
+        this._pendingPasteKeySpec = null;
+        this._previousFocusWindow = null;
+        this._previousFocusMeta = null;
 
         setDebugMode(this._settings.get_boolean('debug-mode'));
         this._signalManager.connect(
@@ -118,6 +124,9 @@ export default class ClipMasterExtension extends Extension {
         }
 
         setDebugMode(false);
+        this._pendingPasteKeySpec = null;
+        this._previousFocusWindow = null;
+        this._previousFocusMeta = null;
         this._settings = null;
 
         console.log('ClipMaster extension disabled');
@@ -184,6 +193,11 @@ export default class ClipMasterExtension extends Extension {
         }
 
         debugLog('showPopup: Starting to show popup');
+
+        // Save focused window so we can restore focus when popup closes.
+        this._previousFocusWindow = global.display.focus_window;
+        this._previousFocusMeta = this._getWindowMeta(this._previousFocusWindow);
+        this._pendingPasteKeySpec = null;
 
         // Add to chrome only when showing (prevents input blocking when hidden)
         if (!this._popupAddedToChrome) {
@@ -285,6 +299,8 @@ export default class ClipMasterExtension extends Extension {
                 debugLog('hidePopup: Removed popup from chrome');
             }
 
+            this._restorePreviousFocusAndMaybePaste();
+
             // Move off-screen as extra safety measure
             this._popup.set_position(-10000, -10000);
             debugLog('hidePopup: Popup hidden and moved off-screen');
@@ -308,6 +324,112 @@ export default class ClipMasterExtension extends Extension {
         const items = this._database.getItems({ limit: 1 });
         if (items.length > 0) {
             this._monitor.copyToClipboard(items[0].plainText, true);
+        }
+    }
+
+    queueAutoPasteForSelection() {
+        this._pendingPasteKeySpec = getPasteKeySpec(this._previousFocusMeta || {});
+        debugLog(`queueAutoPasteForSelection: queued ${this._pendingPasteKeySpec.label}`);
+    }
+
+    _getWindowMeta(window) {
+        if (!window) {
+            return null;
+        }
+
+        let app = null;
+        try {
+            app = this._windowTracker?.get_window_app(window) || null;
+        } catch (e) {
+            debugLog(`_getWindowMeta: Failed to read window app: ${e.message}`);
+        }
+
+        return {
+            appId: app?.get_id?.() || '',
+            wmClass: window.get_wm_class?.() || '',
+            wmClassInstance: window.get_wm_class_instance?.() || '',
+            title: window.get_title?.() || '',
+        };
+    }
+
+    _restorePreviousFocusAndMaybePaste() {
+        const win = this._previousFocusWindow;
+        const pendingPasteKeySpec = this._pendingPasteKeySpec;
+
+        this._previousFocusWindow = null;
+        this._previousFocusMeta = null;
+        this._pendingPasteKeySpec = null;
+
+        if (!win && !pendingPasteKeySpec) {
+            return;
+        }
+
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            try {
+                if (win && win.activate) {
+                    win.activate(global.get_current_time());
+                    debugLog('hidePopup: Restored focus to previous window');
+                }
+            } catch (e) {
+                debugLog(`hidePopup: Failed to restore focus: ${e.message}`);
+            }
+
+            if (pendingPasteKeySpec) {
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 75, () => {
+                    if (global.display.focus_window) {
+                        this._sendPasteShortcut(pendingPasteKeySpec);
+                    } else {
+                        debugLog('_restorePreviousFocusAndMaybePaste: Skipping paste shortcut because no window has focus');
+                    }
+                    return GLib.SOURCE_REMOVE;
+                });
+            }
+
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _sendPasteShortcut(keySpec) {
+        const keyboard = this._createVirtualKeyboard();
+        if (!keyboard) {
+            debugLog('_sendPasteShortcut: No virtual keyboard available');
+            return false;
+        }
+
+        const modifierKeys = Array.isArray(keySpec.modifiers) ? keySpec.modifiers : [];
+        if (!keySpec.keycode) {
+            debugLog('_sendPasteShortcut: Missing hardware keycode');
+            return false;
+        }
+
+        let timestamp = GLib.get_monotonic_time();
+
+        for (const modifierKey of modifierKeys) {
+            keyboard.notify_key(timestamp, modifierKey, Clutter.KeyState.PRESSED);
+            timestamp += 1000;
+        }
+
+        keyboard.notify_key(timestamp, keySpec.keycode, Clutter.KeyState.PRESSED);
+        timestamp += 1000;
+        keyboard.notify_key(timestamp, keySpec.keycode, Clutter.KeyState.RELEASED);
+        timestamp += 1000;
+
+        for (const modifierKey of [...modifierKeys].reverse()) {
+            keyboard.notify_key(timestamp, modifierKey, Clutter.KeyState.RELEASED);
+            timestamp += 1000;
+        }
+
+        debugLog(`_sendPasteShortcut: Sent ${keySpec.label}`);
+        return true;
+    }
+
+    _createVirtualKeyboard() {
+        try {
+            const seat = Clutter.get_default_backend()?.get_default_seat?.();
+            return seat?.create_virtual_device?.(Clutter.InputDeviceType.KEYBOARD_DEVICE) || null;
+        } catch (e) {
+            debugLog(`_createVirtualKeyboard: ${e.message}`);
+            return null;
         }
     }
 }

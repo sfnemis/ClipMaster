@@ -997,6 +997,11 @@ export const ClipboardPopup = GObject.registerClass(
             this.opacity = 0;
             this.reactive = false;
 
+            // Release shell key focus so the previously active app can receive paste shortcuts.
+            if (global.stage?.get_key_focus?.()) {
+                global.stage.set_key_focus(null);
+            }
+
             // Move off-screen as safety measure
             this.set_position(-10000, -10000);
 
@@ -1007,6 +1012,7 @@ export const ClipboardPopup = GObject.registerClass(
             if (this._signalManager) {
                 // Disconnect all known global stage handlers
                 this._signalManager.disconnect('click-outside-handler');
+                this._signalManager.disconnect('focus-window-handler');
                 this._signalManager.disconnect('drag-motion');
                 this._signalManager.disconnect('drag-release');
                 debugLog('All global handlers disconnected');
@@ -1445,7 +1451,7 @@ export const ClipboardPopup = GObject.registerClass(
             });
         }
 
-        _pasteSelected() {
+        async _pasteSelected() {
             debugLog(`=== _pasteSelected() CALLED ===`);
             debugLog(`Items length: ${this._items.length}, selectedIndex: ${this._selectedIndex}`);
 
@@ -1460,7 +1466,7 @@ export const ClipboardPopup = GObject.registerClass(
 
             if (item.type === ItemType.IMAGE && item.content) {
                 debugLog(`Copying image to clipboard: ${item.content}`);
-                this._monitor.copyImageToClipboard(item.content);
+                await this._monitor.copyImageToClipboard(item.content);
             } else {
                 const content = this._plainTextMode ? item.plainText : item.content;
                 debugLog(`Copying text to clipboard (plainText=${this._plainTextMode}): ${content ? content.substring(0, 50) : 'null'}...`);
@@ -1481,6 +1487,7 @@ export const ClipboardPopup = GObject.registerClass(
             debugLog(`close-on-paste=${closeOnPaste}, _isPinned=${this._isPinned}, isFromHover=${isFromHover}`);
 
             if (closeOnPaste && !this._isPinned && !isFromHover) {
+                this._extension.queueAutoPasteForSelection();
                 debugLog(`Closing popup after paste (close-on-paste=true, not pinned, explicit click)`);
                 this._extension.hidePopup();
             } else {
