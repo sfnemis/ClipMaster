@@ -18,7 +18,7 @@ import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
 
 import { gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import { ItemType, debugLog } from '../Util/Constants.js';
+import { ItemType, debugLog, reportError } from '../Util/Constants.js';
 import { SignalManager } from '../Util/Utils.js';
 
 const RECENT_ITEM_COUNT = 5;
@@ -198,7 +198,7 @@ class ClipMasterIndicator extends PanelMenu.Button {
         menuItem.connect('activate', () => {
             if (item.type === ItemType.IMAGE && item.content) {
                 this._extension.monitor.copyImageToClipboard(item.content)
-                    .catch(e => console.error(`ClipMaster: could not copy the image: ${e.message}`));
+                    .catch(e => reportError(`could not copy the image: ${e.message}`));
             } else {
                 this._extension.monitor.copyToClipboard(item.content);
             }

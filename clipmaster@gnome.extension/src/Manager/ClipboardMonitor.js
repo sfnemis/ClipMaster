@@ -12,7 +12,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import { SignalManager, TimeoutManager, SettingsCache, HashUtils, ValidationUtils, loadContents, queryInfo } from '../Util/Utils.js';
-import { ItemType, debugLog } from '../Util/Constants.js';
+import { ItemType, debugLog, reportError, reportWarning } from '../Util/Constants.js';
 import { ImageStorage } from '../Util/ImageStorage.js';
 import { isCodeSnippet } from '../Util/CodeDetect.js';
 
@@ -290,7 +290,7 @@ export class ClipboardMonitor {
 
             this._lastContent = text;
             this._processText(text, 'CLIPBOARD', source)
-                .catch(e => console.error(`ClipMaster: could not store clipboard text: ${e.message}`));
+                .catch(e => reportError(`could not store clipboard text: ${e.message}`));
         });
     }
 
@@ -317,7 +317,7 @@ export class ClipboardMonitor {
 
             this._lastPrimaryContent = text;
             this._processText(text, 'PRIMARY', source)
-                .catch(e => console.error(`ClipMaster: could not store primary selection: ${e.message}`));
+                .catch(e => reportError(`could not store primary selection: ${e.message}`));
         });
     }
 
@@ -579,7 +579,7 @@ export class ClipboardMonitor {
             await this._storeImage(await loadContents(file, this._cancellable), source, fullPath);
         } catch (e) {
             if (!e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                console.error(`ClipMaster: could not store the image file: ${e.message}`);
+                reportError(`could not store the image file: ${e.message}`);
         }
     }
 
@@ -604,12 +604,12 @@ export class ClipboardMonitor {
             else
                 imageData = GLib.base64_decode(imageContent);
         } catch (e) {
-            console.error(`ClipMaster: could not read the stored image: ${e.message}`);
+            reportError(`could not read the stored image: ${e.message}`);
             return;
         }
 
         if (!imageData || imageData.length === 0) {
-            console.warn(`ClipMaster: stored image is missing: ${imageContent}`);
+            reportWarning(`stored image is missing: ${imageContent}`);
             return;
         }
 

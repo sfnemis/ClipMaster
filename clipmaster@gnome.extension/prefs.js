@@ -20,6 +20,7 @@ import GLib from 'gi://GLib';
 import { ExtensionPreferences, gettext as _ } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import { HistoryObfuscator } from './src/Util/Obfuscation.js';
+import { reportError } from './src/Util/Constants.js';
 
 const THEMES = [
     ['adwaita', 'Adwaita'],
@@ -765,7 +766,7 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
     _reportDialogError(error, what) {
         if (error.matches?.(Gtk.DialogError, Gtk.DialogError.DISMISSED))
             return;
-        console.error(`ClipMaster: ${what} dialog failed: ${error.message}`);
+        reportError(`${what} dialog failed: ${error.message}`);
     }
 
     /**

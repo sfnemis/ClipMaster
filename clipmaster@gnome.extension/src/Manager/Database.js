@@ -11,7 +11,7 @@ import Gio from 'gi://Gio';
 import { gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import { TimeoutManager, FileUtils, HashUtils, queryInfo } from '../Util/Utils.js';
-import { ItemType, debugLog } from '../Util/Constants.js';
+import { ItemType, debugLog, reportError, reportWarning } from '../Util/Constants.js';
 import { HistoryObfuscator } from '../Util/Obfuscation.js';
 import { ImageStorage } from '../Util/ImageStorage.js';
 
@@ -103,7 +103,7 @@ export class ClipboardDatabase {
         try {
             await FileUtils.saveTextFileAtomic(this._keyFilePath, this._obfuscator.key);
         } catch (e) {
-            console.error(`ClipMaster: could not save key file: ${e.message}`);
+            reportError(`could not save key file: ${e.message}`);
         }
         this._settings.set_string('encryption-key', this._obfuscator.key);
     }
@@ -231,7 +231,7 @@ export class ClipboardDatabase {
      * that their history is not gone but also not being added to.
      */
     _failLoad(userMessage, detail) {
-        console.error(`ClipMaster: refusing to use the clipboard history: ${detail}`);
+        reportError(`refusing to use the clipboard history: ${detail}`);
 
         this._loadFailed = true;
         this._isLoaded = true;
@@ -247,7 +247,7 @@ export class ClipboardDatabase {
                 Gio.File.new_for_path(copyPath), Gio.FileCopyFlags.NONE, null, null);
         } catch (e) {
             copyPath = null;
-            console.error(`ClipMaster: could not copy the unreadable history aside: ${e.message}`);
+            reportError(`could not copy the unreadable history aside: ${e.message}`);
         }
 
         if (this._onNotification) {
@@ -284,7 +284,7 @@ export class ClipboardDatabase {
         this._isDirty = true;
 
         this._timeoutManager.add(GLib.PRIORITY_DEFAULT, SAVE_DEBOUNCE_MS, () => {
-            this._doSave().catch(e => console.error(`ClipMaster: save failed: ${e.message}`));
+            this._doSave().catch(e => reportError(`save failed: ${e.message}`));
             return GLib.SOURCE_REMOVE;
         }, 'database-save');
     }
@@ -334,7 +334,7 @@ export class ClipboardDatabase {
                     Gio.FileCopyFlags.OVERWRITE, null, null);
             }
         } catch (e) {
-            console.warn(`ClipMaster: could not write the history backup: ${e.message}`);
+            reportWarning(`could not write the history backup: ${e.message}`);
         }
     }
 
@@ -351,7 +351,7 @@ export class ClipboardDatabase {
             FileUtils.saveTextFileAtomicSync(this._storagePath, this._serialize());
             this._isDirty = false;
         } catch (e) {
-            console.error(`ClipMaster: final save failed: ${e.message}`);
+            reportError(`final save failed: ${e.message}`);
         }
     }
 
@@ -457,7 +457,8 @@ export class ClipboardDatabase {
         try {
             this._imageStorage.deleteImage(item.content);
         } catch (e) {
-            console.error(`ClipMaster: could not delete image file ${item.content}: ${e.message}`);
+            // The sweep on the next load clears whatever is left behind.
+            debugLog(`could not delete image file ${item.content}: ${e.message}`);
         }
     }
 

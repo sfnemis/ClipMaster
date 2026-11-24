@@ -26,6 +26,7 @@
 
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
+import { reportWarning } from './Constants.js';
 
 const KEY_LENGTH = 32;
 
@@ -65,7 +66,7 @@ export class HistoryObfuscator {
                 return key;
             }
         } catch (e) {
-            console.warn(`ClipMaster: could not read the system random source, falling back to a weaker key: ${e.message}`);
+            reportWarning(`could not read the system random source, falling back to a weaker key: ${e.message}`);
         } finally {
             stream?.close(null);
         }

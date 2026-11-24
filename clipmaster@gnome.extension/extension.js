@@ -15,7 +15,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import { SignalManager, TimeoutManager, ValidationUtils } from './src/Util/Utils.js';
-import { setDebugMode, debugLog } from './src/Util/Constants.js';
+import { setDebugMode, debugLog, reportError } from './src/Util/Constants.js';
 import { getPasteKeySpec } from './src/Util/PasteUtils.js';
 import { migrateSettings } from './src/Util/Migrations.js';
 import { ClipboardDatabase } from './src/Manager/Database.js';
@@ -60,7 +60,7 @@ export default class ClipMasterExtension extends Extension {
         // synchronous, which is what GNOME Shell expects.
         this._database.init()
             .then(() => this._monitor?.start())
-            .catch(e => console.error(`ClipMaster: could not open the history: ${e.message}`));
+            .catch(e => reportError(`could not open the history: ${e.message}`));
 
         this._popup = new ClipboardPopup(this);
         this._popup.visible = false;
@@ -156,7 +156,7 @@ export default class ClipMasterExtension extends Extension {
                 if (this._popup.isShowing)
                     this._popup.open();
             })
-            .catch(e => console.error(`ClipMaster: could not reload the history: ${e.message}`));
+            .catch(e => reportError(`could not reload the history: ${e.message}`));
     }
 
     _addIndicator() {

@@ -7,6 +7,7 @@
 
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
+import { reportWarning } from './Constants.js';
 
 /**
  * Tracks signal handlers so they can all be disconnected again.
@@ -46,7 +47,7 @@ export class SignalManager {
             try {
                 object.disconnect(handlerId);
             } catch (e) {
-                console.warn(`ClipMaster: could not disconnect handler ${handlerId} of group "${id}": ${e.message}`);
+                reportWarning(`could not disconnect handler ${handlerId} of group "${id}": ${e.message}`);
             }
         }
     }
@@ -195,7 +196,7 @@ export class FileUtils {
             tmpFile.set_attributes_from_info(info, Gio.FileQueryInfoFlags.NONE, null);
         } catch (e) {
             // A filesystem without unix permissions is not a reason to lose the write.
-            console.warn(`ClipMaster: could not set permissions on ${tmpPath}: ${e.message}`);
+            reportWarning(`could not set permissions on ${tmpPath}: ${e.message}`);
         }
 
         tmpFile.move(Gio.File.new_for_path(path), Gio.FileCopyFlags.OVERWRITE, null, null);
@@ -222,7 +223,7 @@ export class FileUtils {
         try {
             tmpFile.set_attributes_from_info(info, Gio.FileQueryInfoFlags.NONE, null);
         } catch (e) {
-            console.warn(`ClipMaster: could not set permissions on ${tmpPath}: ${e.message}`);
+            reportWarning(`could not set permissions on ${tmpPath}: ${e.message}`);
         }
 
         tmpFile.move(Gio.File.new_for_path(path), Gio.FileCopyFlags.OVERWRITE, null, null);

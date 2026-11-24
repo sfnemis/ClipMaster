@@ -17,7 +17,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GdkPixbuf from 'gi://GdkPixbuf';
 
-import { debugLog } from './Constants.js';
+import { debugLog, reportError } from './Constants.js';
 import { loadContents } from './Utils.js';
 
 export class ImageStorage {
@@ -40,7 +40,7 @@ export class ImageStorage {
             GLib.mkdir_with_parents(this._imagesDir, 0o700);
             debugLog(`ImageStorage: Directories ensured at ${this._baseDir}`);
         } catch (e) {
-            console.error(`ImageStorage: Failed to create directories: ${e.message}`);
+            reportError(`could not create the image directory: ${e.message}`);
         }
     }
 
@@ -133,7 +133,7 @@ export class ImageStorage {
             };
 
         } catch (e) {
-            console.error(`ImageStorage: Error saving image: ${e.message}`);
+            reportError(`could not save the image: ${e.message}`);
             return null;
         }
     }
@@ -189,7 +189,7 @@ export class ImageStorage {
 
             return await loadContents(file);
         } catch (e) {
-            console.error(`ImageStorage: Error loading image: ${e.message}`);
+            reportError(`could not load the stored image: ${e.message}`);
             return null;
         }
     }
@@ -205,7 +205,7 @@ export class ImageStorage {
                 debugLog(`ImageStorage: Deleted image: ${imagePath}`);
             }
         } catch (e) {
-            console.error(`ImageStorage: Error deleting image: ${e.message}`);
+            reportError(`could not delete the stored image: ${e.message}`);
         }
     }
 
@@ -235,7 +235,7 @@ export class ImageStorage {
             debugLog(`ImageStorage: Cleaned up ${deletedCount} orphaned images`);
             return deletedCount;
         } catch (e) {
-            console.error(`ImageStorage: Error cleaning orphans: ${e.message}`);
+            reportError(`could not sweep unused image files: ${e.message}`);
             return 0;
         }
     }

@@ -19,7 +19,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import { SignalManager, TimeoutManager, ValidationUtils } from '../Util/Utils.js';
-import { ItemType, debugLog } from '../Util/Constants.js';
+import { ItemType, debugLog, reportError, reportWarning } from '../Util/Constants.js';
 import { QrCodeGenerator, QrEcc } from '../Util/QrCodeGenerator.js';
 
 const THEME_NAMES = [
@@ -129,7 +129,7 @@ class ClipboardPopup extends St.BoxLayout {
                     this._customStylesheet = customFile;
                     return;
                 } catch (e) {
-                    console.error(`ClipMaster: could not load the custom theme: ${e.message}`);
+                    reportError(`could not load the custom theme: ${e.message}`);
                 }
             }
         }
@@ -154,7 +154,7 @@ class ClipboardPopup extends St.BoxLayout {
         try {
             St.ThemeContext.get_for_stage(global.stage).get_theme().unload_stylesheet(this._customStylesheet);
         } catch (e) {
-            console.warn(`ClipMaster: could not unload the custom theme: ${e.message}`);
+            reportWarning(`could not unload the custom theme: ${e.message}`);
         }
         this._customStylesheet = null;
     }

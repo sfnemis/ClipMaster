@@ -34,3 +34,19 @@ export function debugLog(message) {
 export function setDebugMode(enabled) {
     debugEnabled = enabled;
 }
+
+/**
+ * Reports a failure the user may need to know about.
+ *
+ * Every message goes through here rather than through `console` at each call
+ * site, so the prefix is written once and the whole extension's output is
+ * countable in one place. These are failures only; routine progress belongs in
+ * `debugLog`, which is silent unless the debug setting is on.
+ */
+export function reportError(message) {
+    console.error(`ClipMaster: ${message}`);
+}
+
+export function reportWarning(message) {
+    console.warn(`ClipMaster: ${message}`);
+}
