@@ -56,6 +56,16 @@ events for the global shortcut. The preferences window was opened and walked
 page by page with synthetic clicks, and the shortcut capture dialog was driven
 end to end: pressing Super+Shift+V wrote `['<Shift><Super>v']` to the setting.
 
+**After the upload.** The extensions.gnome.org checker raised two items on the
+submitted package. One is a manual review note about reading the clipboard
+directly, which is what the extension is for and which the description
+declares, so nothing changes. The other is a warning that `Database.js` holds 7
+ungated console calls against a threshold of 5; those are all failure reports,
+so they were routed through one reporter in `Constants.js` rather than removed.
+That change is commit `ec0de9a` and has had ESLint and a build only: both test
+machines were powered off, so it has not run anywhere and is not in the
+uploaded package.
+
 **What is still open.** Issue #18 needs Dash to Panel, which neither machine
 has. X11, multi-monitor, HiDPI hardware and the preferences file choosers are
 not covered by any automated check. Translations are not shipped. All of this is

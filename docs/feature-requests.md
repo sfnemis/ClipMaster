@@ -239,6 +239,30 @@ review. The submitted zip matches a rebuild of `release/v2.0` at `060a684` file
 by file. Still to do by hand: upload the new page screenshot, post the two
 drafted comments, merge the branch and close the issues once 2.0 is public.
 
+### H. The automated check on the 2.0 submission
+
+extensions.gnome.org ran its own checker on the uploaded package and raised two
+items.
+
+- **H1 NO CHANGE NEEDED. EGO-A-005, manual review: "extensions should not
+  access the clipboard directly".** It flags `St.Clipboard.get_default()` at
+  `src/Manager/ClipboardMonitor.js:37`. Reading the clipboard is what a
+  clipboard manager is, the review guidelines allow it provided the description
+  declares it, and the description does. This is a note for the human reviewer,
+  not a defect.
+- **H2 FIXED, NOT YET VERIFIED. EGO-A-004, warning: 7 ungated console calls in
+  `src/Manager/Database.js` against a threshold of 5.** Every message was a
+  genuine failure report, so none were removed; they now go through
+  `reportError` and `reportWarning` in `Constants.js`, which also writes the
+  `ClipMaster` prefix that each call site repeated by hand. Database.js has
+  none at the call sites and Constants.js has three. One message, a failed
+  delete of a stored image, was downgraded to debug output because the sweep on
+  the next load clears what is left behind.
+
+  Commit `ec0de9a` has had ESLint and a package build only. Both virtual
+  machines were powered off when it was written, so it has not run anywhere.
+  The uploaded package does not contain it.
+
 ## Verification
 
 Run on the exact source that produces the package.
