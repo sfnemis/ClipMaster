@@ -61,5 +61,9 @@ has. X11, multi-monitor, HiDPI hardware and the preferences file choosers are
 not covered by any automated check. Translations are not shipped. All of this is
 listed under G in `docs/feature-requests.md`.
 
+**Issue replies.** With Sait's approval, a comment was posted on #17, #20, #21,
+#23, #25, #26, #27 and #28, each naming what was actually wrong rather than
+only saying it is fixed. No issue was closed; that waits until 2.0 is public.
+
 **Not done.** Nothing was submitted or uploaded anywhere. The package is ready
 for Sait to upload when he decides to.
