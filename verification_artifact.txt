@@ -1,3 +1,0 @@
-v1.2.2 Hotfix Verified
-v1.2.3 Patch Verified
-v1.2.4 Syntax Fix Verified

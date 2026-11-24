@@ -2691,3 +2691,51 @@
 .clipmaster-popup.theme-ayu.light .clipmaster-item:hover .clipmaster-item-icon {
     color: #575f66 !important;
 }
+/* --- Version 2 additions --- */
+
+/* Private mode: a banner in the popup and a tinted panel icon, so that a
+   session which is not being recorded is obvious without opening settings. */
+.clipmaster-private-banner {
+    background-color: rgba(229, 165, 10, 0.18);
+    color: #e5a50a;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin: 0 8px 6px 8px;
+    font-size: 11px;
+}
+
+.clipmaster-popup.light .clipmaster-private-banner {
+    background-color: rgba(181, 121, 0, 0.14);
+    color: #b57900;
+}
+
+.clipmaster-indicator-private {
+    color: #e5a50a;
+}
+
+/* Resize handle in the bottom right corner of the popup. */
+.clipmaster-resize-handle {
+    padding: 2px 4px;
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.clipmaster-resize-handle:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.clipmaster-popup.light .clipmaster-resize-handle {
+    color: rgba(0, 0, 0, 0.4);
+}
+
+.clipmaster-popup.light .clipmaster-resize-handle:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.75);
+}
+
+/* Marker on an item that is pinned to the top of the list. */
+.clipmaster-item-pinned {
+    color: #3584e4;
+    padding: 0 4px;
+}

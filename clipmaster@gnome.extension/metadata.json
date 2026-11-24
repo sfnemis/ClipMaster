@@ -1,19 +1,18 @@
 {
     "uuid": "clipmaster@gnome.extension",
     "name": "ClipMaster",
-    "description": "ClipMaster is a clipboard manager with history, image support, favorites, and optional themes. Follows system dark/light preference by default.",
-    "version": 9,
-    "version-name": "1.3.1",
+    "description": "Clipboard history for GNOME Shell.\n\nClipMaster reads the clipboard so that it can offer a history of what you copied. Everything it stores stays on this computer: it has no network code and sends nothing anywhere.\n\n* Text, links, colours, code and images, with thumbnails\n* Search, favourites, pinned items and custom lists\n* Private mode and a per-application exclusion list, for anything that should not be recorded\n* A QR code for sharing a link or a note with a phone\n* Twelve themes, or follow the system light and dark preference\n* No keyboard shortcut is set by default; choose one in the preferences",
+    "version-name": "2.0",
     "shell-version": [
-        "45",
         "46",
         "47",
         "48",
-        "49"
+        "49",
+        "50",
+        "51"
     ],
     "url": "https://github.com/sfnemis/ClipMaster",
     "settings-schema": "org.gnome.shell.extensions.clipmaster",
-    "gettext-domain": "clipmaster",
     "donations": {
         "github": "sfnemis",
         "kofi": "sfnemis",

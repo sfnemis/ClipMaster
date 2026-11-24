@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getPasteKeySpec, isTerminalWindow } from '../src/Util/PasteUtils.js';
+import { getPasteKeySpec, isTerminalWindow } from '../clipmaster@gnome.extension/src/Util/PasteUtils.js';
 
 const SHIFT_LEFT = 42;
 const CTRL_LEFT = 29;

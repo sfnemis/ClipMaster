@@ -2,8 +2,15 @@
  * ClipMaster - Image Storage Utility
  * License: GPL-2.0-or-later
  * 
- * Handles image file storage with thumbnail generation for optimized database size.
- * Images are stored as WebP files, thumbnails are kept small for popup display.
+ * A copied image is written to its own file under the user data directory and
+ * the history keeps only the path, so the history file stays small. A thumbnail
+ * is generated at the same time and stored in the history itself, base64
+ * encoded, which is what the popup and the panel menu draw.
+ *
+ * WebP is preferred for both because it is much smaller, but it needs the
+ * gdk-pixbuf WebP loader, which is a separate package on most distributions
+ * and is not always installed. PNG is the fallback whenever that loader is
+ * missing, so no distribution needs an extra dependency for this to work.
  */
 
 import GLib from 'gi://GLib';
@@ -11,6 +18,7 @@ import Gio from 'gi://Gio';
 import GdkPixbuf from 'gi://GdkPixbuf';
 
 import { debugLog } from './Constants.js';
+import { loadContents } from './Utils.js';
 
 export class ImageStorage {
     constructor(baseDir = null) {
@@ -19,7 +27,6 @@ export class ImageStorage {
         ]);
 
         this._imagesDir = GLib.build_filenamev([this._baseDir, 'images']);
-        this._thumbnailsDir = GLib.build_filenamev([this._baseDir, 'thumbnails']);
 
         // Thumbnail settings
         this._thumbSize = 128;      // pixels (width or height, maintaining aspect ratio)
@@ -30,8 +37,7 @@ export class ImageStorage {
 
     _ensureDirectories() {
         try {
-            GLib.mkdir_with_parents(this._imagesDir, 0o755);
-            GLib.mkdir_with_parents(this._thumbnailsDir, 0o755);
+            GLib.mkdir_with_parents(this._imagesDir, 0o700);
             debugLog(`ImageStorage: Directories ensured at ${this._baseDir}`);
         } catch (e) {
             console.error(`ImageStorage: Failed to create directories: ${e.message}`);
@@ -45,18 +51,18 @@ export class ImageStorage {
      * @param {string} hash - Unique hash for the image
      * @returns {Promise<{imagePath: string, thumbnail: string, originalSize: number, thumbnailSize: number}|null>}
      */
-    async saveImage(imageData, format = 'png', hash = null) {
+    async saveImage(imageData, hash = null) {
         const timestamp = Date.now();
         const imageId = hash || `img_${timestamp}`;
 
         try {
             // Step 1: Save original image as WebP for compression
             const imagePath = GLib.build_filenamev([this._imagesDir, `${imageId}.webp`]);
-            const thumbPath = GLib.build_filenamev([this._thumbnailsDir, `${imageId}.webp`]);
 
-            // Load image data into pixbuf
+            // Decoding runs asynchronously: a synchronous decode of a multi
+            // megabyte image happens on the compositor thread and drops frames.
             const inputStream = Gio.MemoryInputStream.new_from_bytes(new GLib.Bytes(imageData));
-            const pixbuf = GdkPixbuf.Pixbuf.new_from_stream(inputStream, null);
+            const pixbuf = await ImageStorage._pixbufFromStream(inputStream);
             inputStream.close(null);
 
             if (!pixbuf) {
@@ -93,8 +99,9 @@ export class ImageStorage {
                 if (success) {
                     thumbnailBase64 = GLib.base64_encode(buffer);
                 }
-            } catch (e) {
-                // Fallback to PNG
+            } catch {
+                // WebP needs the gdk-pixbuf WebP loader, which is not installed
+                // everywhere, so PNG is the fallback for the thumbnail too.
                 try {
                     const [success, buffer] = thumbPixbuf.save_to_bufferv('png', [], []);
                     if (success) {
@@ -129,6 +136,18 @@ export class ImageStorage {
             console.error(`ImageStorage: Error saving image: ${e.message}`);
             return null;
         }
+    }
+
+    static _pixbufFromStream(stream) {
+        return new Promise((resolve, reject) => {
+            GdkPixbuf.Pixbuf.new_from_stream_async(stream, null, (source, result) => {
+                try {
+                    resolve(GdkPixbuf.Pixbuf.new_from_stream_finish(result));
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        });
     }
 
     /**
@@ -168,8 +187,7 @@ export class ImageStorage {
                 return null;
             }
 
-            const [contents] = await file.load_contents_async(null);
-            return contents;
+            return await loadContents(file);
         } catch (e) {
             console.error(`ImageStorage: Error loading image: ${e.message}`);
             return null;
@@ -177,69 +195,18 @@ export class ImageStorage {
     }
 
     /**
-     * Delete an image and its thumbnail
-     * @param {string} imagePath - Path to the image file
+     * @param {string} imagePath - Path to the stored image file
      */
     deleteImage(imagePath) {
         try {
-            // Delete main image
             const imageFile = Gio.File.new_for_path(imagePath);
             if (imageFile.query_exists(null)) {
                 imageFile.delete(null);
                 debugLog(`ImageStorage: Deleted image: ${imagePath}`);
             }
-
-            // Delete corresponding thumbnail
-            const basename = GLib.path_get_basename(imagePath);
-            const thumbPath = GLib.build_filenamev([this._thumbnailsDir, basename]);
-            const thumbFile = Gio.File.new_for_path(thumbPath);
-            if (thumbFile.query_exists(null)) {
-                thumbFile.delete(null);
-                debugLog(`ImageStorage: Deleted thumbnail: ${thumbPath}`);
-            }
         } catch (e) {
             console.error(`ImageStorage: Error deleting image: ${e.message}`);
         }
-    }
-
-    /**
-     * Get storage statistics
-     */
-    async getStats() {
-        const stats = {
-            imageCount: 0,
-            thumbnailCount: 0,
-            totalImageSize: 0,
-            totalThumbnailSize: 0
-        };
-
-        try {
-            // Count images
-            const imagesDir = Gio.File.new_for_path(this._imagesDir);
-            const imagesEnum = imagesDir.enumerate_children('standard::name,standard::size', Gio.FileQueryInfoFlags.NONE, null);
-
-            let info;
-            while ((info = imagesEnum.next_file(null)) !== null) {
-                stats.imageCount++;
-                stats.totalImageSize += info.get_size();
-            }
-            imagesEnum.close(null);
-
-            // Count thumbnails
-            const thumbsDir = Gio.File.new_for_path(this._thumbnailsDir);
-            const thumbsEnum = thumbsDir.enumerate_children('standard::name,standard::size', Gio.FileQueryInfoFlags.NONE, null);
-
-            while ((info = thumbsEnum.next_file(null)) !== null) {
-                stats.thumbnailCount++;
-                stats.totalThumbnailSize += info.get_size();
-            }
-            thumbsEnum.close(null);
-
-        } catch (e) {
-            debugLog(`ImageStorage: Error getting stats: ${e.message}`);
-        }
-
-        return stats;
     }
 
     /**
@@ -275,9 +242,5 @@ export class ImageStorage {
 
     get imagesDir() {
         return this._imagesDir;
-    }
-
-    get thumbnailsDir() {
-        return this._thumbnailsDir;
     }
 }

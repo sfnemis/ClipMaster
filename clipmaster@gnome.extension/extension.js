@@ -1,435 +1,461 @@
 /*
  * ClipMaster - GNOME Shell Extension
- * 
- * Copyright (C) 2025 SFN
- * License: GPL-2.0-or-later
+ *
+ * Copyright (C) 2025 SFN <sfnemis@github.com>
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 import GLib from 'gi://GLib';
-import Gio from 'gi://Gio';
-import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
+import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import { SignalManager, ValidationUtils } from './src/Util/Utils.js';
+import { SignalManager, TimeoutManager, ValidationUtils } from './src/Util/Utils.js';
 import { setDebugMode, debugLog } from './src/Util/Constants.js';
 import { getPasteKeySpec } from './src/Util/PasteUtils.js';
+import { migrateSettings } from './src/Util/Migrations.js';
 import { ClipboardDatabase } from './src/Manager/Database.js';
 import { ClipboardMonitor } from './src/Manager/ClipboardMonitor.js';
 import { ClipboardPopup } from './src/UI/Popup.js';
 import { ClipMasterIndicator } from './src/UI/Indicator.js';
 
+const KEYBINDINGS = ['toggle-popup', 'paste-as-plain', 'toggle-private-mode'];
+
+const FOCUS_RESTORE_DELAY_MS = 50;
+const PASTE_DELAY_MS = 75;
 
 export default class ClipMasterExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
-        this._extensionPath = this.path;
         this._signalManager = new SignalManager();
+        this._timeoutManager = new TimeoutManager();
         this._windowTracker = Shell.WindowTracker.get_default();
+        this._boundKeys = new Set();
         this._pendingPasteKeySpec = null;
         this._previousFocusWindow = null;
         this._previousFocusMeta = null;
+        this._popupAddedToChrome = false;
+
+        migrateSettings(this._settings);
 
         setDebugMode(this._settings.get_boolean('debug-mode'));
         this._signalManager.connect(
-            this._settings,
-            'changed::debug-mode',
-            () => setDebugMode(this._settings.get_boolean('debug-mode')),
-            'debug-mode-changed'
-        );
+            this._settings, 'changed::debug-mode',
+            () => setDebugMode(this._settings.get_boolean('debug-mode')), 'debug-mode');
 
-        const storagePath = this._settings.get_string('storage-path');
         this._database = new ClipboardDatabase(
-            storagePath || null,
+            this._settings.get_string('storage-path') || null,
             this._settings,
-            (title, message) => Main.notify(title, message)
-        );
+            (title, message) => Main.notify(title, message));
 
-        // Initialize database asynchronously
-        this._database.init().catch(e => {
-            console.error(`ClipMaster: Database initialization error: ${e.message}`);
-        });
+        this._monitor = new ClipboardMonitor(this._settings, this._database, id => this._onNewItem(id));
 
-        this._monitor = new ClipboardMonitor(
-            this._settings,
-            this._database,
-            this._onNewItem.bind(this)
-        );
-        this._monitor.start();
+        // Reading the history is asynchronous and the monitor must not record
+        // anything before it finishes: an item stored first would be given an
+        // identifier that the stored history also uses. `enable()` itself stays
+        // synchronous, which is what GNOME Shell expects.
+        this._database.init()
+            .then(() => this._monitor?.start())
+            .catch(e => console.error(`ClipMaster: could not open the history: ${e.message}`));
 
         this._popup = new ClipboardPopup(this);
-        this._popup.set_size(450, 550);
-        this._popup.set_position(-10000, -10000); // Start off-screen
         this._popup.visible = false;
         this._popup.opacity = 0;
         this._popup.reactive = false;
-        this._popupAddedToChrome = false;
+        this._popup.set_position(-10000, -10000);
 
-        if (this._settings.get_boolean('show-indicator')) {
-            this._indicator = new ClipMasterIndicator(this);
-            Main.panel.addToStatusArea('clipmaster', this._indicator);
-        }
+        if (this._settings.get_boolean('show-indicator'))
+            this._addIndicator();
+
+        this._signalManager.connect(
+            this._settings, 'changed::show-indicator',
+            () => {
+                if (this._settings.get_boolean('show-indicator'))
+                    this._addIndicator();
+                else
+                    this._removeIndicator();
+            },
+            'show-indicator');
+
+        this._signalManager.connect(
+            this._settings, 'changed::reload-request', () => this._reloadDatabase(), 'reload-request');
 
         this._bindShortcuts();
-        // Stylesheet is now loaded automatically by GNOME Shell 45+ if placed in root
+        for (const key of KEYBINDINGS) {
+            this._signalManager.connect(
+                this._settings, `changed::${key}`, () => this._rebindShortcut(key), `rebind-${key}`);
+        }
 
-        console.log('ClipMaster extension enabled');
+        this._maybeShowShortcutHint();
+    }
+
+    /**
+     * Tells a user upgrading from 1.3.1 once that the keyboard shortcut is now
+     * theirs to choose, since the extension no longer ships one.
+     */
+    _maybeShowShortcutHint() {
+        if (!this._settings.get_boolean('show-shortcut-hint'))
+            return;
+
+        this._settings.set_boolean('show-shortcut-hint', false);
+        this._timeoutManager.add(GLib.PRIORITY_DEFAULT, 3000, () => {
+            Main.notify(
+                _('ClipMaster needs a keyboard shortcut'),
+                _('ClipMaster no longer sets one by default. Open its preferences to choose a shortcut for the clipboard popup.'));
+            return GLib.SOURCE_REMOVE;
+        }, 'shortcut-hint');
     }
 
     disable() {
         this._unbindShortcuts();
 
-        if (this._monitor) {
-            this._monitor.stop();
-            this._monitor = null;
+        this._signalManager.disconnectAll();
+        this._signalManager = null;
+
+        this._timeoutManager.removeAll();
+        this._timeoutManager = null;
+
+        this._monitor.stop();
+        this._monitor = null;
+
+        if (this._popupAddedToChrome) {
+            Main.layoutManager.removeChrome(this._popup);
+            this._popupAddedToChrome = false;
         }
+        this._popup.destroy();
+        this._popup = null;
 
-        if (this._popup) {
-            // Ensure all handlers are cleaned up BEFORE any destruction
-            this._popup._isPinned = false; // Force unpin to allow cleanup
-            this._popup._isShowing = false;
+        this._removeIndicator();
 
-            // Clean up internal state first
-            if (this._popup.dispose_resources) {
-                this._popup.dispose_resources();
-            }
-
-            // Remove from chrome before destroying
-            if (this._popupAddedToChrome) {
-                Main.layoutManager.removeChrome(this._popup);
-                this._popupAddedToChrome = false;
-            }
-
-            this._popup.destroy();
-            this._popup = null;
-        }
-
-        if (this._indicator) {
-            this._indicator.destroy();
-            this._indicator = null;
-        }
-
-        if (this._database) {
-            this._database.destroy();
-            this._database = null;
-        }
-
-        if (this._signalManager) {
-            this._signalManager.disconnectAll();
-            this._signalManager = null;
-        }
+        this._database.destroy();
+        this._database = null;
 
         setDebugMode(false);
+
+        this._windowTracker = null;
         this._pendingPasteKeySpec = null;
         this._previousFocusWindow = null;
         this._previousFocusMeta = null;
+        this._boundKeys = null;
         this._settings = null;
-
-        console.log('ClipMaster extension disabled');
     }
 
-    _bindShortcuts() {
-        Main.wm.addKeybinding(
-            'toggle-popup',
-            this._settings,
-            Meta.KeyBindingFlags.NONE,
-            Shell.ActionMode.ALL,
-            this.togglePopup.bind(this)
-        );
+    /**
+     * The preferences window runs in its own process, so when it changes the
+     * history file it raises `reload-request` rather than hoping the shell
+     * notices. Without this the copy held here would be written back over it.
+     */
+    _reloadDatabase() {
+        this._database.reload()
+            .then(() => {
+                this._indicator?.refresh();
+                if (this._popup.isShowing)
+                    this._popup.open();
+            })
+            .catch(e => console.error(`ClipMaster: could not reload the history: ${e.message}`));
+    }
 
-        Main.wm.addKeybinding(
-            'paste-as-plain',
-            this._settings,
-            Meta.KeyBindingFlags.NONE,
-            Shell.ActionMode.ALL,
-            this._pasteAsPlain.bind(this)
-        );
+    _addIndicator() {
+        if (this._indicator)
+            return;
+
+        this._indicator = new ClipMasterIndicator(this);
+        Main.panel.addToStatusArea('clipmaster', this._indicator);
+    }
+
+    _removeIndicator() {
+        if (!this._indicator)
+            return;
+
+        this._indicator.destroy();
+        this._indicator = null;
+    }
+
+    /**
+     * Shortcuts ship with no default, because the review guidelines forbid an
+     * extension that touches the clipboard from claiming one, and because the
+     * two defaults earlier versions used were already taken: `<Super>v` by the
+     * notification list and `<Ctrl><Shift>v` by every terminal. A binding is
+     * registered only once the user has chosen it in the preferences.
+     */
+    _bindShortcuts() {
+        for (const key of KEYBINDINGS)
+            this._bindShortcut(key);
+    }
+
+    _bindShortcut(key) {
+        if (this._settings.get_strv(key).length === 0)
+            return;
+
+        const handlers = {
+            'toggle-popup': () => this.togglePopup(),
+            'paste-as-plain': () => this._pasteAsPlain(),
+            'toggle-private-mode': () => this.togglePrivateMode(),
+        };
+
+        Main.wm.addKeybinding(key, this._settings, Meta.KeyBindingFlags.NONE, Shell.ActionMode.ALL, handlers[key]);
+        this._boundKeys.add(key);
+    }
+
+    _rebindShortcut(key) {
+        if (this._boundKeys.has(key)) {
+            Main.wm.removeKeybinding(key);
+            this._boundKeys.delete(key);
+        }
+        this._bindShortcut(key);
     }
 
     _unbindShortcuts() {
-        Main.wm.removeKeybinding('toggle-popup');
-        Main.wm.removeKeybinding('paste-as-plain');
+        for (const key of this._boundKeys)
+            Main.wm.removeKeybinding(key);
+        this._boundKeys.clear();
     }
 
-    _onNewItem(itemId) {
-        // Safety check - extension might be disabled during async callback
-        if (!this._settings) {
-            debugLog('_onNewItem: settings is null, skipping');
-            return;
-        }
+    togglePrivateMode() {
+        const enabled = !this._settings.get_boolean('private-mode');
+        this._settings.set_boolean('private-mode', enabled);
 
-        // Indicator might not exist if show-indicator is off
-        if (this._indicator) {
-            this._refreshIndicator();
-        }
+        Main.notify('ClipMaster', enabled
+            ? _('Private mode is on. Nothing is being recorded.')
+            : _('Private mode is off. The clipboard is being recorded again.'));
 
-        if (this._settings && this._settings.get_boolean('show-notification')) {
-            Main.notify('ClipMaster', _('New item added to clipboard'));
-        }
+        this._indicator?.refreshIcon();
+    }
+
+    _onNewItem() {
+        this._indicator?.refresh();
+
+        if (this._settings.get_boolean('show-notification'))
+            Main.notify('ClipMaster', _('New item added to the clipboard history'));
     }
 
     _refreshIndicator() {
-        // Safety check for disposed indicator
-        if (!this._indicator) {
-            return;
-        }
+        this._indicator?.refresh();
+    }
 
-        this._indicator.refresh();
+    get database() {
+        return this._database;
+    }
+
+    get monitor() {
+        return this._monitor;
+    }
+
+    get settings() {
+        return this._settings;
     }
 
     showPopup() {
-        if (!this._popup) {
-            debugLog('showPopup: No popup available');
+        if (this._popup.isShowing)
             return;
-        }
 
-        if (this._popup._isShowing) {
-            debugLog('showPopup: Already showing, ignoring');
-            return;
-        }
-
-        debugLog('showPopup: Starting to show popup');
-
-        // Save focused window so we can restore focus when popup closes.
         this._previousFocusWindow = global.display.focus_window;
         this._previousFocusMeta = this._getWindowMeta(this._previousFocusWindow);
         this._pendingPasteKeySpec = null;
 
-        // Add to chrome only when showing (prevents input blocking when hidden)
+        // The popup joins the chrome only while it is on screen. Tracked chrome
+        // always affects the input region, so leaving it there when hidden made
+        // unrelated windows swallow clicks, which is what issue #2 reported.
+        //
+        // No parameters are passed. `affectsInputRegion` was accepted up to
+        // GNOME 49 and removed in GNOME 50, where passing it makes addChrome
+        // throw and the popup never appears at all: that is what issue #27 was
+        // really about. `trackFullscreen` is left at its default of false on
+        // purpose, so the history can still be opened over a fullscreen window.
         if (!this._popupAddedToChrome) {
-            Main.layoutManager.addChrome(this._popup, {
-                affectsInputRegion: true,
-                trackFullscreen: true
-            });
+            Main.layoutManager.addChrome(this._popup);
             this._popupAddedToChrome = true;
-            debugLog('showPopup: Added popup to chrome');
         }
 
-        this._popup.cancelClickOutside();
+        const [width, height] = this._popupSize();
+        const monitor = this._targetMonitor();
+        const [x, y] = this._popupPosition(monitor, width, height);
 
-        this._popup._isShowing = true;
+        this._popup.set_size(width, height);
+        this._popup.set_position(x, y);
+        this._popup.open();
+    }
 
-        let popupWidth = ValidationUtils.validateNumber(
-            this._settings.get_int('popup-width'),
-            300, 2000, 450
-        );
-        let popupHeight = ValidationUtils.validateNumber(
-            this._settings.get_int('popup-height'),
-            300, 2000, 550
-        );
+    /**
+     * The stored size is in logical pixels, so it is multiplied by the scale
+     * factor to come out the same physical size on a HiDPI monitor. Issue #28
+     * was a 4K user getting a popup a quarter of the area they expected.
+     */
+    _popupSize() {
+        const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor || 1;
+        const monitor = this._targetMonitor();
 
-        // Get cursor position first to determine which monitor to use
-        const [mouseX, mouseY] = global.get_pointer();
+        const width = ValidationUtils.validateNumber(this._settings.get_int('popup-width'), 280, 4000, 450) * scale;
+        const height = ValidationUtils.validateNumber(this._settings.get_int('popup-height'), 280, 4000, 550) * scale;
 
-        // Find the monitor where the cursor is located
-        let monitor = Main.layoutManager.primaryMonitor;
-        if (mouseX !== undefined && mouseY !== undefined &&
-            !isNaN(mouseX) && !isNaN(mouseY)) {
-            for (let i = 0; i < Main.layoutManager.monitors.length; i++) {
-                const mon = Main.layoutManager.monitors[i];
-                if (mouseX >= mon.x && mouseX < mon.x + mon.width &&
-                    mouseY >= mon.y && mouseY < mon.y + mon.height) {
-                    monitor = mon;
-                    break;
-                }
-            }
-        }
+        return [
+            Math.round(Math.min(width, monitor.width - 20)),
+            Math.round(Math.min(height, monitor.height - 20)),
+        ];
+    }
 
-        if (!monitor || !monitor.width || !monitor.height) {
-            console.log('ClipMaster: No valid monitor found');
-            this._popup._isShowing = false;
-            return;
-        }
+    _targetMonitor() {
+        const [pointerX, pointerY] = global.get_pointer();
 
-        // Default to center of the current monitor
-        let posX = Math.round(monitor.x + (monitor.width - popupWidth) / 2);
-        let posY = Math.round(monitor.y + (monitor.height - popupHeight) / 2);
+        const pointerMonitor = Main.layoutManager.monitors.find(monitor =>
+            pointerX >= monitor.x && pointerX < monitor.x + monitor.width
+            && pointerY >= monitor.y && pointerY < monitor.y + monitor.height);
 
-        if (this._settings.get_boolean('popup-at-cursor')) {
-            if (mouseX !== undefined && mouseY !== undefined &&
-                !isNaN(mouseX) && !isNaN(mouseY) &&
-                mouseX >= 0 && mouseY >= 0) {
-                // Position popup centered horizontally on cursor, slightly above cursor
-                posX = Math.round(mouseX - popupWidth / 2);
-                posY = Math.round(mouseY - 50);
+        return pointerMonitor || Main.layoutManager.primaryMonitor;
+    }
 
-                // Clamp to the monitor where the cursor is located
-                posX = Math.max(monitor.x + 10, Math.min(posX, monitor.x + monitor.width - popupWidth - 10));
-                posY = Math.max(monitor.y + 50, Math.min(posY, monitor.y + monitor.height - popupHeight - 10));
-            }
-        }
+    _popupPosition(monitor, width, height) {
+        const margin = 12;
+        const position = this._settings.get_string('popup-position');
 
-        posX = ValidationUtils.validateNumber(posX, 0, 10000, 100);
-        posY = ValidationUtils.validateNumber(posY, 0, 10000, 100);
+        const left = monitor.x + margin;
+        const right = monitor.x + monitor.width - width - margin;
+        const centerX = monitor.x + Math.round((monitor.width - width) / 2);
+        const top = monitor.y + margin;
+        const bottom = monitor.y + monitor.height - height - margin;
+        const centerY = monitor.y + Math.round((monitor.height - height) / 2);
 
-        this._popup.set_size(Math.round(popupWidth), Math.round(popupHeight));
-        this._popup.set_position(Math.round(posX), Math.round(posY));
+        const anchors = {
+            'center': [centerX, centerY],
+            'top-left': [left, top],
+            'top-center': [centerX, top],
+            'top-right': [right, top],
+            'left': [left, centerY],
+            'right': [right, centerY],
+            'bottom-left': [left, bottom],
+            'bottom-center': [centerX, bottom],
+            'bottom-right': [right, bottom],
+        };
 
-        debugLog(`showPopup: Calling popup.show() at position (${posX}, ${posY})`);
-        this._popup.show();
-        debugLog('showPopup: Popup.show() completed');
+        if (position !== 'cursor')
+            return anchors[position] || anchors['center'];
+
+        const [pointerX, pointerY] = global.get_pointer();
+        return [
+            Math.max(left, Math.min(Math.round(pointerX - width / 2), right)),
+            Math.max(top, Math.min(Math.round(pointerY - 50), bottom)),
+        ];
     }
 
     hidePopup() {
-        debugLog('hidePopup: Called');
-        if (this._popup) {
-            debugLog(`hidePopup: _isShowing=${this._popup._isShowing}, visible=${this._popup.visible}, _isPinned=${this._popup._isPinned}`);
+        if (!this._popup || this._popup.isPinned)
+            return;
 
-            if (this._popup._isPinned) {
-                debugLog('hidePopup: Popup is pinned, not hiding');
-                return;
-            }
+        this._popup.close();
 
-            this._popup._isShowing = false;
-            this._popup.hide();
+        // Closing the indicator menu tells panel extensions such as Dash to
+        // Panel that nothing of ours is open any more, so auto hide can resume.
+        this._indicator?.menu.close();
 
-            // Close indicator menu to signal Dash to Panel that menu is closed
-            if (this._indicator?.menu) {
-                this._indicator.menu.close();
-            }
-
-            // Remove from chrome when hidden to prevent any input interference
-            if (this._popupAddedToChrome) {
-                Main.layoutManager.removeChrome(this._popup);
-                this._popupAddedToChrome = false;
-                debugLog('hidePopup: Removed popup from chrome');
-            }
-
-            this._restorePreviousFocusAndMaybePaste();
-
-            // Move off-screen as extra safety measure
-            this._popup.set_position(-10000, -10000);
-            debugLog('hidePopup: Popup hidden and moved off-screen');
-        } else {
-            debugLog('hidePopup: No popup available');
+        if (this._popupAddedToChrome) {
+            Main.layoutManager.removeChrome(this._popup);
+            this._popupAddedToChrome = false;
         }
+
+        this._restorePreviousFocusAndMaybePaste();
+        this._popup.set_position(-10000, -10000);
     }
 
     togglePopup() {
-        debugLog(`togglePopup: _isShowing=${this._popup ? this._popup._isShowing : 'no popup'}`);
-        if (this._popup && this._popup._isShowing) {
-            debugLog('togglePopup: Hiding popup');
+        if (this._popup.isShowing)
             this.hidePopup();
-        } else {
-            debugLog('togglePopup: Showing popup');
+        else
             this.showPopup();
-        }
     }
 
     _pasteAsPlain() {
         const items = this._database.getItems({ limit: 1 });
-        if (items.length > 0) {
+        if (items.length > 0)
             this._monitor.copyToClipboard(items[0].plainText, true);
-        }
     }
 
     queueAutoPasteForSelection() {
         this._pendingPasteKeySpec = getPasteKeySpec(this._previousFocusMeta || {});
-        debugLog(`queueAutoPasteForSelection: queued ${this._pendingPasteKeySpec.label}`);
     }
 
     _getWindowMeta(window) {
-        if (!window) {
+        if (!window)
             return null;
-        }
 
-        let app = null;
-        try {
-            app = this._windowTracker?.get_window_app(window) || null;
-        } catch (e) {
-            debugLog(`_getWindowMeta: Failed to read window app: ${e.message}`);
-        }
+        const app = this._windowTracker.get_window_app(window);
 
         return {
-            appId: app?.get_id?.() || '',
-            wmClass: window.get_wm_class?.() || '',
-            wmClassInstance: window.get_wm_class_instance?.() || '',
-            title: window.get_title?.() || '',
+            appId: app?.get_id() || '',
+            wmClass: window.get_wm_class() || '',
+            wmClassInstance: window.get_wm_class_instance() || '',
+            title: window.get_title() || '',
         };
     }
 
     _restorePreviousFocusAndMaybePaste() {
-        const win = this._previousFocusWindow;
-        const pendingPasteKeySpec = this._pendingPasteKeySpec;
+        const window = this._previousFocusWindow;
+        const keySpec = this._pendingPasteKeySpec;
 
         this._previousFocusWindow = null;
         this._previousFocusMeta = null;
         this._pendingPasteKeySpec = null;
 
-        if (!win && !pendingPasteKeySpec) {
+        if (!window && !keySpec)
             return;
-        }
 
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
-            try {
-                if (win && win.activate) {
-                    win.activate(global.get_current_time());
-                    debugLog('hidePopup: Restored focus to previous window');
-                }
-            } catch (e) {
-                debugLog(`hidePopup: Failed to restore focus: ${e.message}`);
-            }
+        this._timeoutManager.add(GLib.PRIORITY_DEFAULT, FOCUS_RESTORE_DELAY_MS, () => {
+            if (window)
+                window.activate(global.get_current_time());
 
-            if (pendingPasteKeySpec) {
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 75, () => {
-                    if (global.display.focus_window) {
-                        this._sendPasteShortcut(pendingPasteKeySpec);
-                    } else {
-                        debugLog('_restorePreviousFocusAndMaybePaste: Skipping paste shortcut because no window has focus');
-                    }
+            if (keySpec) {
+                this._timeoutManager.add(GLib.PRIORITY_DEFAULT, PASTE_DELAY_MS, () => {
+                    if (global.display.focus_window)
+                        this._sendPasteShortcut(keySpec);
                     return GLib.SOURCE_REMOVE;
-                });
+                }, 'auto-paste');
             }
 
             return GLib.SOURCE_REMOVE;
-        });
+        }, 'restore-focus');
     }
 
     _sendPasteShortcut(keySpec) {
         const keyboard = this._createVirtualKeyboard();
         if (!keyboard) {
-            debugLog('_sendPasteShortcut: No virtual keyboard available');
-            return false;
-        }
-
-        const modifierKeys = Array.isArray(keySpec.modifiers) ? keySpec.modifiers : [];
-        if (!keySpec.keycode) {
-            debugLog('_sendPasteShortcut: Missing hardware keycode');
-            return false;
+            debugLog('No virtual keyboard device is available, skipping the paste');
+            return;
         }
 
         let timestamp = GLib.get_monotonic_time();
-
-        for (const modifierKey of modifierKeys) {
-            keyboard.notify_key(timestamp, modifierKey, Clutter.KeyState.PRESSED);
+        const press = keycode => {
+            keyboard.notify_key(timestamp, keycode, Clutter.KeyState.PRESSED);
             timestamp += 1000;
-        }
-
-        keyboard.notify_key(timestamp, keySpec.keycode, Clutter.KeyState.PRESSED);
-        timestamp += 1000;
-        keyboard.notify_key(timestamp, keySpec.keycode, Clutter.KeyState.RELEASED);
-        timestamp += 1000;
-
-        for (const modifierKey of [...modifierKeys].reverse()) {
-            keyboard.notify_key(timestamp, modifierKey, Clutter.KeyState.RELEASED);
+        };
+        const release = keycode => {
+            keyboard.notify_key(timestamp, keycode, Clutter.KeyState.RELEASED);
             timestamp += 1000;
-        }
+        };
 
-        debugLog(`_sendPasteShortcut: Sent ${keySpec.label}`);
-        return true;
+        for (const modifier of keySpec.modifiers)
+            press(modifier);
+
+        press(keySpec.keycode);
+        release(keySpec.keycode);
+
+        for (const modifier of [...keySpec.modifiers].reverse())
+            release(modifier);
+
+        debugLog(`Sent ${keySpec.label} to the focused window`);
     }
 
+    /**
+     * `Clutter.get_default_backend()` was removed in GNOME 51, so the backend
+     * comes from the stage context there. The older call is kept for the shell
+     * versions that do not have the newer one.
+     */
     _createVirtualKeyboard() {
-        try {
-            const seat = Clutter.get_default_backend()?.get_default_seat?.();
-            return seat?.create_virtual_device?.(Clutter.InputDeviceType.KEYBOARD_DEVICE) || null;
-        } catch (e) {
-            debugLog(`_createVirtualKeyboard: ${e.message}`);
-            return null;
-        }
+        const backend = global.stage.context?.get_backend?.() ?? Clutter.get_default_backend?.();
+        const seat = backend?.get_default_seat();
+
+        return seat?.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE) || null;
     }
 }

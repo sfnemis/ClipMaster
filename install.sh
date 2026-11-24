@@ -1,70 +1,57 @@
-#!/bin/bash
-# ClipMaster GNOME Extension Installer
+#!/usr/bin/env bash
+#
+# Installs ClipMaster from a clone of this repository.
+#
+# Most people should install from https://extensions.gnome.org/extension/8923/clipmaster/
+# instead. This script is for trying out a development version.
+set -euo pipefail
 
-set -e
+UUID="clipmaster@gnome.extension"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TARGET="$HOME/.local/share/gnome-shell/extensions/$UUID"
 
-EXTENSION_UUID="clipmaster@gnome.extension"
-EXTENSION_DIR="$HOME/.local/share/gnome-shell/extensions/$EXTENSION_UUID"
-SOURCE_DIR="$(dirname "$(readlink -f "$0")")/$EXTENSION_UUID"
+echo "ClipMaster installer"
+echo
 
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║          ClipMaster GNOME Extension Installer            ║"
-echo "║   ClipMaster - Clipboard manager for GNOME 45+           ║"
-echo "╚══════════════════════════════════════════════════════════╝"
-echo ""
-
-# Check GNOME Shell version
-GNOME_VERSION=$(gnome-shell --version 2>/dev/null | grep -oP '\d+' | head -1)
-echo "Detected GNOME Shell version: $GNOME_VERSION"
-
-if [ "$GNOME_VERSION" -lt 45 ]; then
-    echo "⚠️  Warning: This extension requires GNOME 45 or later."
-    echo "   Your version: $GNOME_VERSION"
-    read -p "Continue anyway? [y/N] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
+if ! command -v gnome-shell >/dev/null 2>&1; then
+    echo "gnome-shell was not found. ClipMaster is a GNOME Shell extension." >&2
+    exit 1
 fi
 
-echo ""
-echo "Installing ClipMaster extension..."
+VERSION=$(gnome-shell --version | grep -oE '[0-9]+' | head -1)
+echo "GNOME Shell $VERSION detected."
 
-# Create extension directory
-mkdir -p "$EXTENSION_DIR"
-
-# Copy files
-echo "→ Copying extension files..."
-echo "→ Copying extension files..."
-if [ -d "$SOURCE_DIR" ]; then
-    cp -r "$SOURCE_DIR"/* "$EXTENSION_DIR/"
-else
-    # Fallback if running from root of repo
-    cp -r clipmaster@gnome.extension/* "$EXTENSION_DIR/"
+if [ "$VERSION" -lt 46 ]; then
+    echo "ClipMaster 2 supports GNOME Shell 46 and later." >&2
+    exit 1
 fi
 
-# Compile schemas
-echo "→ Compiling GSettings schemas..."
-if [ -d "$EXTENSION_DIR/schemas" ]; then
-    glib-compile-schemas "$EXTENSION_DIR/schemas/"
+# The same file list the release package uses, so a development install and a
+# published one contain exactly the same thing.
+echo "Building the package..."
+bash "$ROOT/scripts/build.sh" >/dev/null
+
+echo "Installing into $TARGET"
+rm -rf "$TARGET"
+mkdir -p "$TARGET"
+cp -r "$ROOT/build/$UUID/." "$TARGET/"
+
+if command -v glib-compile-schemas >/dev/null 2>&1; then
+    glib-compile-schemas "$TARGET/schemas/"
 fi
 
-echo ""
-echo "✅ Installation complete!"
-echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║                    Next Steps                            ║"
-echo "╠══════════════════════════════════════════════════════════╣"
-echo "║  1. Log out and log back in (required on Wayland)        ║"
-echo "║     OR press Alt+F2, type 'r', press Enter (X11 only)    ║"
-echo "║                                                          ║"
-echo "║  2. Enable the extension:                                ║"
-echo "║     gnome-extensions enable $EXTENSION_UUID              ║"
-echo "║                                                          ║"
-echo "║  3. Or use GNOME Extensions app / extensions.gnome.org   ║"
-echo "║                                                          ║"
-echo "║  4. Default shortcut: Super+V to show clipboard popup    ║"
-echo "╚══════════════════════════════════════════════════════════╝"
-echo ""
-echo "Enjoy ClipMaster! 🎉"
-
+echo
+echo "Installed. Two things are left:"
+echo
+echo "  1. Restart the GNOME session so the shell notices the extension."
+echo "     On Wayland that means logging out and back in."
+echo "     On X11 you can press Alt+F2, type r and press Enter."
+echo
+echo "  2. Enable it and choose a keyboard shortcut:"
+echo "       gnome-extensions enable $UUID"
+echo "       gnome-extensions prefs $UUID"
+echo
+echo "ClipMaster ships without a keyboard shortcut on purpose. The GNOME"
+echo "Extensions review guidelines do not allow one for an extension that reads"
+echo "the clipboard, and the shortcuts earlier versions used were already taken"
+echo "by GNOME and by every terminal. Pick your own on the Shortcuts page."

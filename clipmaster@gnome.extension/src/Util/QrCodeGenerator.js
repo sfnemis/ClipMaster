@@ -1,13 +1,35 @@
 /*
- * ClipMaster - QR Code Generator Utility
- * License: GPL-2.0-or-later
- * 
- * Based on qrcodegen library by Project Nayuki (MIT License)
- * Simplified for GNOME Shell extension use.
- * Supports text/URL encoding with error correction.
+ * ClipMaster - QR Code Generator
+ *
+ * Copyright (C) 2025 SFN <sfnemis@github.com>
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ *
+ * The encoder below is derived from the QR Code generator library by Project
+ * Nayuki (https://www.nayuki.io/page/qr-code-generator-library), reduced to the
+ * byte and alphanumeric modes this extension needs. The original is offered
+ * under the MIT License and its notice is reproduced in full as that license
+ * requires:
+ *
+ *   Copyright (c) Project Nayuki. (MIT License)
+ *
+ *   Permission is hereby granted, free of charge, to any person obtaining a copy
+ *   of this software and associated documentation files (the "Software"), to deal
+ *   in the Software without restriction, including without limitation the rights
+ *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *   copies of the Software, and to permit persons to whom the Software is
+ *   furnished to do so, subject to the following conditions:
+ *
+ *   - The above copyright notice and this permission notice shall be included in
+ *     all copies or substantial portions of the Software.
+ *   - The Software is provided "as is", without warranty of any kind, express or
+ *     implied, including but not limited to the warranties of merchantability,
+ *     fitness for a particular purpose and noninfringement. In no event shall the
+ *     authors or copyright holders be liable for any claim, damages or other
+ *     liability, whether in an action of contract, tort or otherwise, arising from,
+ *     out of or in connection with the Software or the use or other dealings in the
+ *     Software.
  */
 
-import GLib from 'gi://GLib';
 import { debugLog } from './Constants.js';
 
 /**
@@ -53,40 +75,6 @@ export class QrCodeGenerator {
             size: qr.size,
             modules: qr.modules
         };
-    }
-
-    /**
-     * Generate QR code as SVG string
-     * @param {string} text - Text to encode
-     * @param {Object} options - Options
-     * @returns {string} - SVG markup
-     */
-    static toSvg(text, options = {}) {
-        const border = options.border ?? 2;
-        const lightColor = options.lightColor ?? '#FFFFFF';
-        const darkColor = options.darkColor ?? '#000000';
-        const ecl = options.ecl ?? QrEcc.MEDIUM;
-
-        const { size, modules } = this.generate(text, ecl);
-
-        const fullSize = size + border * 2;
-
-        let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fullSize} ${fullSize}">`;
-        svg += `<rect width="100%" height="100%" fill="${lightColor}"/>`;
-        svg += `<path d="`;
-
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                if (modules[y][x]) {
-                    svg += `M${x + border},${y + border}h1v1h-1z`;
-                }
-            }
-        }
-
-        svg += `" fill="${darkColor}"/>`;
-        svg += `</svg>`;
-
-        return svg;
     }
 
     /**
@@ -192,7 +180,7 @@ class QrCode {
         }
 
         // Build data bits
-        let bb = [];
+        const bb = [];
         for (const seg of segs) {
             appendBits(seg.mode.modeBits, 4, bb);
             appendBits(seg.numChars, seg.mode.numCharCountBits(version), bb);

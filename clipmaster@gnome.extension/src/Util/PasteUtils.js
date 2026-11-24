@@ -1,3 +1,15 @@
+/*
+ * ClipMaster - Paste shortcut selection
+ *
+ * Copyright (C) 2025 SFN <sfnemis@github.com>
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ *
+ * Terminals use Ctrl+Shift+V to paste because Ctrl+V is already the interrupt
+ * character, so a synthetic paste has to send a different combination there
+ * than it does everywhere else. The keycodes are Linux evdev codes, which is
+ * what a Clutter virtual keyboard device expects.
+ */
+
 const TERMINAL_IDENTIFIERS = [
     'org.gnome.terminal',
     'org.gnome.console',

@@ -39,3 +39,6 @@ EXTENSIONS_GNOME_ORG_DESCRIPTION*.md
 
 # Thumbnail temp directory
 clipmaster-thumbnails/
+build/
+node_modules/
+package-lock.json

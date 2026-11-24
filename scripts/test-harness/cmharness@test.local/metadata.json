@@ -1,0 +1,7 @@
+{
+    "uuid": "cmharness@test.local",
+    "name": "ClipMaster test harness",
+    "description": "Development only. Exposes a D-Bus method that runs JavaScript inside GNOME Shell so that the ClipMaster popup can be driven and photographed from a script. Never publish this and never install it on a machine you care about.",
+    "shell-version": ["46", "47", "48", "49", "50", "51"],
+    "url": "https://github.com/sfnemis/ClipMaster"
+}
