@@ -263,6 +263,13 @@ items.
   behaviour checks and 24 interface checks pass on each, ESLint clean. The
   uploaded package does not contain this change.
 
+### I. Decision on the submitted package
+
+Leave it alone. Neither checker item is a rejection, the A-004 fix changes no
+behaviour, and replacing a package while it is in the queue costs the position.
+The fix ships in the next version. Sait asked twice whether he had to upload
+again; the answer recorded here is no.
+
 ## Verification
 
 Run on the exact source that produces the package.

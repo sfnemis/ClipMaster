@@ -35,6 +35,14 @@ package is `build/clipmaster@gnome.extension.shell-extension.zip`, built by
 Ubuntu 26.04 with GNOME Shell 50.1 and Fedora 45 with GNOME Shell 51.1, with
 104 unit checks, 27 behaviour checks and 24 interface checks passing on each.
 
+The site's automated checker raised two items on the upload and neither blocks
+approval: a manual review note about reading the clipboard directly, which is
+what the extension is for and which the description declares, and a warning
+about seven failure messages in one file against a threshold of five. The
+second is already fixed on the branch and deliberately held back for the next
+version, because it changes no behaviour and replacing a package during review
+costs the queue position.
+
 Until that review passes, 1.3.1 is what users get. Describe ClipMaster by what
 1.3.1 does only where the difference matters; everything in the 2.0 section
 below is real, tested and submitted, but not yet public.
