@@ -62,9 +62,14 @@ directly, which is what the extension is for and which the description
 declares, so nothing changes. The other is a warning that `Database.js` holds 7
 ungated console calls against a threshold of 5; those are all failure reports,
 so they were routed through one reporter in `Constants.js` rather than removed.
-That change is commit `ec0de9a` and has had ESLint and a build only: both test
-machines were powered off, so it has not run anywhere and is not in the
-uploaded package.
+That change is commit `ec0de9a`, verified on both machines on 2026-11-25 with
+the full set of checks passing. It is not in the uploaded package; the advice
+was to leave the submission alone, because the item is a warning rather than a
+rejection and swapping the package during review costs the queue position.
+
+A third machine, `xfn@192.168.10.189`, turned out to be EndeavourOS running KDE
+Plasma, with neither gnome-shell nor gjs installed. ClipMaster cannot run there
+at all, so it was left alone.
 
 **What is still open.** Issue #18 needs Dash to Panel, which neither machine
 has. X11, multi-monitor, HiDPI hardware and the preferences file choosers are

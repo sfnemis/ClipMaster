@@ -250,7 +250,7 @@ items.
   clipboard manager is, the review guidelines allow it provided the description
   declares it, and the description does. This is a note for the human reviewer,
   not a defect.
-- **H2 FIXED, NOT YET VERIFIED. EGO-A-004, warning: 7 ungated console calls in
+- **H2 FIXED. EGO-A-004, warning: 7 ungated console calls in
   `src/Manager/Database.js` against a threshold of 5.** Every message was a
   genuine failure report, so none were removed; they now go through
   `reportError` and `reportWarning` in `Constants.js`, which also writes the
@@ -259,9 +259,9 @@ items.
   delete of a stored image, was downgraded to debug output because the sweep on
   the next load clears what is left behind.
 
-  Commit `ec0de9a` has had ESLint and a package build only. Both virtual
-  machines were powered off when it was written, so it has not run anywhere.
-  The uploaded package does not contain it.
+  Verified on 2026-11-25 on both machines after the fix: 104 unit checks, 27
+  behaviour checks and 24 interface checks pass on each, ESLint clean. The
+  uploaded package does not contain this change.
 
 ## Verification
 
