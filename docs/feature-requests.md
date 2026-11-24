@@ -232,6 +232,13 @@ Four complaints, checked one by one against the code.
 - **G5 OPEN. E2.4, the theme reverting to the default dark one.** Not
   reproduced; waiting on the reviewer.
 
+## Release
+
+Uploaded to extensions.gnome.org by Sait on 2026-11-24 at 21:05, waiting for
+review. The submitted zip matches a rebuild of `release/v2.0` at `060a684` file
+by file. Still to do by hand: upload the new page screenshot, post the two
+drafted comments, merge the branch and close the issues once 2.0 is public.
+
 ## Verification
 
 Run on the exact source that produces the package.

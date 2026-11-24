@@ -77,5 +77,10 @@ reproduced; `follow-system-theme` overriding the choice fits the symptom and
 the theme list is insensitive while that switch is on, so the override is at
 least visible now. Tracked as E2.4 and G5.
 
-**Not done.** Nothing was submitted or uploaded anywhere. The package is ready
-for Sait to upload when he decides to.
+**Uploaded.** Sait uploaded the package to extensions.gnome.org himself at
+21:05 on 2026-11-24 and it is waiting for review. The submitted zip was
+extracted and compared file by file against a rebuild of the same source: no
+difference, so what is in review is exactly `release/v2.0`. The page screenshot
+is still the one from 1.2.1 and has to be uploaded separately, since it does
+not come from `metadata.json`; the description does, so it updates itself when
+the review passes.
