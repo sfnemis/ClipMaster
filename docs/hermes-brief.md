@@ -32,7 +32,7 @@ on GitHub.
 Prepared but not uploaded: **2.0**. The package is
 `build/clipmaster@gnome.extension.shell-extension.zip`, built by
 `scripts/build.sh`. It is verified on two virtual machines, Ubuntu 26.04 with
-GNOME Shell 50.1 and Fedora 45 with GNOME Shell 51.1, with 104 unit checks, 25
+GNOME Shell 50.1 and Fedora 45 with GNOME Shell 51.1, with 104 unit checks, 27
 behaviour checks and 24 interface checks passing on each. Uploading is Sait's
 decision and Sait's action.
 
@@ -81,6 +81,9 @@ obfuscation of the stored history file.
   because it is the first question people ask about a clipboard manager.
 - **It has no dependencies.** Older documentation asked for `wl-clipboard` and
   `xclip`. No version has ever used them.
+- **A copy that is both text and a picture is kept as text.** Spreadsheets,
+  note applications and drawing canvases offer both at once. Up to 1.3.1
+  ClipMaster took the picture and discarded the text.
 
 ## Open items
 
@@ -91,3 +94,5 @@ obfuscation of the stored history file.
 - No translations are shipped. Every string is marked for translation, so this
   is a packaging job rather than a code one.
 - The preferences file choosers, import and export have no automated coverage.
+- A reviewer on extensions.gnome.org reported a chosen theme reverting to the
+  default dark one. It was not reproduced and is waiting on more detail.

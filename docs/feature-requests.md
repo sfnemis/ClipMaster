@@ -172,6 +172,32 @@ the extension on both machines.
 | 18 | Popup vanishes with Dash to Panel auto hide | OPEN to verify | needs Dash to Panel, not installed on either machine |
 | 16 | Change the default plain text paste shortcut | FIXED | A1 |
 
+### E2. The 2 star review on extensions.gnome.org, from huesosdebrasa on Fedora 43
+
+Four complaints, checked one by one against the code.
+
+- **E2.1 FIXED. The panel icon could not be turned off.** `show-indicator` was
+  read once in `enable()` and nothing watched it, so the switch did nothing
+  until the session restarted. It adds and removes the indicator live now.
+- **E2.2 FIXED. A shortcut conflict survived changing the shortcut.** The
+  reviewer set the popup to `Super+Shift+V` and still lost `Ctrl+Shift+V` in
+  LibreOffice, because that was the *second* shortcut, "paste as plain text",
+  which kept its own default. Both ship empty now. Same root cause as #16 and
+  #23.
+- **E2.3 FIXED. A copy was stored as a picture when it was also text.**
+  Copying canvas elements in Obsidian stored a rendered image instead of the
+  text. `_checkForImage` took the image whenever any `image/*` flavour was on
+  offer, and applications that offer both are common: spreadsheets, note
+  applications, drawing canvases. Text now wins when `text/plain` is offered
+  beside the image, with `prefer-image-over-text` to reverse it. A real image
+  copy offers no `text/plain` and is unaffected.
+- **E2.4 OPEN, partly addressed. A chosen theme reverts to the default dark
+  one.** `follow-system-theme` defaults to on and overrides the theme choice,
+  which fits the symptom, but the exact sequence the reviewer described was not
+  reproduced. In version 2 the theme list is insensitive while the follow
+  switch is on, so the override is visible rather than silent. Needs the
+  reviewer to say whether it still happens.
+
 ### F. Features added in version 2
 
 - **F1 FIXED. HiDPI and resizing.** The stored size is in logical pixels and is
@@ -203,6 +229,8 @@ the extension on both machines.
   single monitor at scale 1.
 - **G4 OPEN. The preferences file choosers, import and export** are not covered
   by any automated check.
+- **G5 OPEN. E2.4, the theme reverting to the default dark one.** Not
+  reproduced; waiting on the reviewer.
 
 ## Verification
 
@@ -212,7 +240,7 @@ Run on the exact source that produces the package.
 |-------|--------------------------|------------------------|
 | ESLint | clean | clean |
 | Unit, `tests/run-tests.js` | 104 checks pass | 104 checks pass |
-| Live behaviour, `scripts/live-test.sh` | 25 pass | 25 pass |
+| Live behaviour, `scripts/live-test.sh` | 27 pass | 27 pass |
 | Live interface, `scripts/live-ui-test.sh` | 24 pass | 24 pass |
 
 ## Process notes

@@ -45,7 +45,7 @@ at https://github.com/sfnemis/ClipMaster.
 |-------|-------------------------------|------------------------------|
 | ESLint | clean | clean |
 | Unit checks | 104 pass | 104 pass |
-| Live behaviour | 25 pass | 25 pass |
+| Live behaviour | 27 pass | 27 pass |
 | Live interface | 24 pass | 24 pass |
 
 Both machines run Wayland. The live checks assert against the stored history
@@ -64,6 +64,18 @@ listed under G in `docs/feature-requests.md`.
 **Issue replies.** With Sait's approval, a comment was posted on #17, #20, #21,
 #23, #25, #26, #27 and #28, each naming what was actually wrong rather than
 only saying it is fixed. No issue was closed; that waits until 2.0 is public.
+
+**The 2 star review on extensions.gnome.org.** Checked against the code rather
+than answered from memory. Three of its four complaints were real defects and
+are fixed: the panel icon switch did nothing until a restart, the plain text
+paste shortcut kept its own default so the terminal and LibreOffice conflict
+survived changing the main shortcut, and a copy offered as both text and a
+picture was stored as the picture, throwing the text away. That last one now
+keeps the text, with `prefer-image-over-text` to reverse it, and has two live
+checks. The fourth, a chosen theme reverting to the default dark one, was not
+reproduced; `follow-system-theme` overriding the choice fits the symptom and
+the theme list is insensitive while that switch is on, so the override is at
+least visible now. Tracked as E2.4 and G5.
 
 **Not done.** Nothing was submitted or uploaded anywhere. The package is ready
 for Sait to upload when he decides to.

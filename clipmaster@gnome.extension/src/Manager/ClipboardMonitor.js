@@ -321,15 +321,37 @@ export class ClipboardMonitor {
         });
     }
 
+    /**
+     * Decides whether this selection is an image.
+     *
+     * Plenty of applications offer the same copy in several forms at once. A
+     * table from a spreadsheet, a selection from a note taking application or a
+     * drawing canvas all tend to offer text and a rendered picture of that
+     * text. Taking the picture whenever one is on offer is how a user ended up
+     * pasting screenshots of their own notes: the text was right there and was
+     * never stored.
+     *
+     * So an image wins only when there is no readable text beside it, unless
+     * the user asks for the opposite. A copy that is genuinely an image, from a
+     * screenshot tool or a browser's "copy image", offers no `text/plain` at
+     * all and is unaffected.
+     */
     _checkForImage(selectionType, source, callback) {
         const metaSelectionType = selectionType === 'PRIMARY'
             ? Meta.SelectionType.SELECTION_PRIMARY
             : Meta.SelectionType.SELECTION_CLIPBOARD;
 
-        const mimetypes = this._selection.get_mimetypes(metaSelectionType);
-        const hasImage = mimetypes?.some(mime => mime.startsWith('image/'));
+        const mimetypes = this._selection.get_mimetypes(metaSelectionType) ?? [];
+        const hasImage = mimetypes.some(mime => mime.startsWith('image/'));
 
         if (!hasImage) {
+            callback(false);
+            return;
+        }
+
+        const hasText = mimetypes.some(mime => mime.startsWith('text/plain'));
+        if (hasText && !this._setting('prefer-image-over-text')) {
+            debugLog('The selection offers both text and an image, keeping the text');
             callback(false);
             return;
         }

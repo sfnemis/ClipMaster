@@ -12,6 +12,7 @@
 
 import Gtk from 'gi://Gtk?version=4.0';
 import Gdk from 'gi://Gdk';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
 
@@ -34,8 +35,27 @@ window.connect('map', () => {
         value.init(GObject.TYPE_STRING);
         value.set_string(text);
 
+        let provider = Gdk.ContentProvider.new_for_value(value);
+
+        // With CM_WITH_IMAGE the helper offers the same copy as text and as a
+        // picture at once, which is what a spreadsheet or a drawing canvas
+        // does. ClipMaster should keep the text.
+        if (GLib.getenv('CM_WITH_IMAGE') === '1') {
+            const pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, false, 8, 8, 8);
+            pixbuf.fill(0x3584e4ff);
+
+            const texture = new GObject.Value();
+            texture.init(Gdk.Texture.$gtype);
+            texture.set_object(Gdk.Texture.new_for_pixbuf(pixbuf));
+
+            provider = Gdk.ContentProvider.new_union([
+                provider,
+                Gdk.ContentProvider.new_for_value(texture),
+            ]);
+        }
+
         const clipboard = window.get_clipboard();
-        clipboard.set_content(Gdk.ContentProvider.new_for_value(value));
+        clipboard.set_content(provider);
 
         // Reading it back is the instrument checking itself. A Wayland client
         // that has no focus cannot take the selection, and `set_content`

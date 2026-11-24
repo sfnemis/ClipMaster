@@ -79,6 +79,17 @@ chosen your own, it is kept.
   of a second
 - Clearing the history asks first and tells you how many items will go
 
+### From a review on extensions.gnome.org
+
+- Turning the panel icon off did nothing until you restarted the session
+- Copying something that is offered both as text and as a picture, which is
+  what spreadsheets, note applications and drawing canvases do, stored the
+  picture and threw the text away. The text is kept now, and there is a setting
+  if you want the picture instead
+- The shortcut conflict with terminals and with LibreOffice survived changing
+  the shortcut, because it was the second one, "paste as plain text", that kept
+  its own default
+
 ### Smaller fixes
 
 - The preferences window no longer asks you to reload the extension by hand

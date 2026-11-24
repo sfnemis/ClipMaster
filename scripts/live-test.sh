@@ -57,6 +57,7 @@ set_s excluded-apps "[]"
 set_s encrypt-database true
 set_s skip-duplicates true
 set_s track-images true
+set_s prefer-image-over-text false
 gnome-extensions enable "$UUID"; sleep 3
 hide_overview
 journalctl --user -b -o cat --since "-5s" >/dev/null 2>&1
@@ -122,13 +123,33 @@ wait
 has "excluded while the extension restarts" && bad "the startup capture ignored the exclusion list" || ok "the startup capture honours the exclusion list"
 set_s excluded-apps "[]"
 
-echo "== 6 duplicates"
+echo "== 6 a copy offered as text and as a picture is kept as text"
+before=$(items)
+CM_WITH_IMAGE=1 copy "a table that is also a picture"
+if [ "$(items)" -eq "$((before + 1))" ] && dump | grep -F "a table that is also a picture" | grep -q "type=text"; then
+    ok "the text half is kept, not the rendered picture"
+else
+    bad "stored as: $(dump | grep -F 'a table that is also a picture' || echo 'nothing')"
+fi
+
+echo "== 6b and the other way round when asked"
+set_s prefer-image-over-text true
+before=$(items)
+CM_WITH_IMAGE=1 copy "another table that is also a picture"
+if dump | grep -q "type=image"; then
+    ok "the picture is kept when the setting asks for it"
+else
+    bad "no image item was stored"
+fi
+set_s prefer-image-over-text false
+
+echo "== 7 duplicates"
 copy "a line that repeats"
 before=$(items)
 copy "a line that repeats"
 [ "$(items)" -eq "$before" ] && ok "a duplicate does not add a second item" || bad "a duplicate was added"
 
-echo "== 7 a restart does not duplicate the clipboard it finds"
+echo "== 8 a restart does not duplicate the clipboard it finds"
 copy "still on the clipboard across a restart" 8000 &
 sleep 2
 before=$(items)
@@ -136,11 +157,11 @@ cycle
 wait
 [ "$(items)" -eq "$before" ] && ok "the startup capture deduplicates" || bad "the startup capture duplicated an item ($before -> $(items))"
 
-echo "== 8 identifiers are unique"
+echo "== 9 identifiers are unique"
 dup=$(dump | sed -n 's/^ITEM id=\([0-9]*\).*/\1/p' | sort | uniq -d | wc -l)
 [ "${dup:-0}" -eq 0 ] && ok "no two items share an identifier" || bad "$dup identifier(s) are used twice"
 
-echo "== 9 turning obfuscation off keeps the history"
+echo "== 10 turning obfuscation off keeps the history"
 expected=$(items)
 set_s encrypt-database false
 cycle
@@ -149,7 +170,7 @@ has "first captured line" && ok "the oldest item is still readable" || bad "the 
 copy "written while plain"
 dump | head -1 | grep -q "FORMAT plain" && ok "new writes are plain" || bad "the format did not change"
 
-echo "== 10 and turning it back on"
+echo "== 11 and turning it back on"
 expected=$(items)
 set_s encrypt-database true
 cycle
@@ -157,7 +178,7 @@ copy "written while obfuscated again"
 dump | head -1 | grep -q "FORMAT obfuscated" && ok "writes are obfuscated again" || bad "writes are still plain"
 [ "$(items)" -ge "$expected" ] && ok "nothing was lost turning it back on" || bad "items were lost"
 
-echo "== 11 a damaged history is never overwritten"
+echo "== 12 a damaged history is never overwritten"
 cp "$DB" /tmp/clipmaster-good.json
 gnome-extensions disable "$UUID"; sleep 2
 printf 'CMOB1:this-is-not-valid-base64-or-utf8' > "$DB"
@@ -174,12 +195,12 @@ rm -f "$DB".unreadable-*
 cycle
 has "first captured line" && ok "the restored history reads back" || bad "the restored history does not read back"
 
-echo "== 12 enable and disable leaves nothing behind"
+echo "== 13 enable and disable leaves nothing behind"
 for i in 1 2 3; do cycle; done
 errors=$(journalctl --user -b -o cat --since "$MARK" 2>/dev/null | grep -cE "JS ERROR|clipmaster.*(TypeError|ReferenceError)")
 [ "${errors:-0}" -eq 0 ] && ok "no JavaScript errors across the whole run" || bad "$errors JavaScript error(s) in the journal"
 
-echo "== 13 the history file stays private"
+echo "== 14 the history file stays private"
 mode=$(stat -c %a "$DB")
 [ "$mode" = "600" ] && ok "the history file is readable by its owner only" || bad "the history file mode is $mode"
 keymode=$(stat -c %a "${DB%.json}.key")

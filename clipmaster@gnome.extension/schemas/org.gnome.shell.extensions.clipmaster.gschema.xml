@@ -84,6 +84,12 @@
       <description>Store images that are copied to the clipboard.</description>
     </key>
 
+    <key name="prefer-image-over-text" type="b">
+      <default>false</default>
+      <summary>Prefer the picture when a copy offers both</summary>
+      <description>Many applications offer a copy as text and as a rendered picture of that text at the same time. By default ClipMaster keeps the text, which is almost always the useful half. Turn this on to keep the picture instead.</description>
+    </key>
+
     <key name="track-files" type="b">
       <default>true</default>
       <summary>Record copied files</summary>

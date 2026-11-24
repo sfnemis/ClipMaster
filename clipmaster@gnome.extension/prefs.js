@@ -114,6 +114,11 @@ export default class ClipMasterPreferences extends ExtensionPreferences {
             subtitle: _('Store images copied to the clipboard'),
         }));
 
+        contentGroup.add(this._switchRow(settings, 'prefer-image-over-text', {
+            title: _('Prefer the picture when a copy offers both'),
+            subtitle: _('Spreadsheets, note applications and drawing canvases often offer text and a picture of that text at once. ClipMaster keeps the text unless this is on.'),
+        }));
+
         contentGroup.add(this._switchRow(settings, 'track-files', {
             title: _('Copied files'),
             subtitle: _('Store file references copied from a file manager'),
