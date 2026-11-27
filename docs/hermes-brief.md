@@ -111,6 +111,10 @@ obfuscation of the stored history file.
 
 ## Open items
 
+- GitHub has no open issue as of 2026-11-28. The seven that were open were all
+  fixed in 2.0 and were closed with a comment linking the release. Two of those
+  fixes are unverified on real hardware and may come back: #28, the popup size
+  on a hidpi monitor, and #18, the popup with Dash to Panel auto hide.
 - Issue #18, the popup and Dash to Panel with auto hide, is unverified: neither
   test machine has Dash to Panel installed.
 - X11, multi-monitor and HiDPI hardware are untested; both test machines are

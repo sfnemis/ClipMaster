@@ -41,11 +41,19 @@ listed 26 files.
 **What is still open.** The GitHub zip is built from `51899bd` and therefore
 contains the EGO-A-004 logging change (`ec0de9a`) that the package in review at
 extensions.gnome.org, built from `060a684`, does not. No behaviour differs.
-Carried over and still by hand: the 2.0 page screenshot on
-extensions.gnome.org, the two drafted comments, and closing the seven open
-issues once 2.0 is public there. Issues #20, #23, #25 and #27 are fixed by this
-release but stay open by the decision recorded in section I of
-`docs/feature-requests.md`.
+Carried over and still by hand, both on extensions.gnome.org: the 2.0 page
+screenshot, and the reply to the 2 star review tracked as E2.
+
+**Issues closed.** Sait then asked for the seven open issues to be answered and
+closed, which reverses the earlier "wait until 2.0 is public on the site"
+decision now that the GitHub release exists. #17, #20, #23, #25, #26, #27 and
+#28 are closed as completed, each with a short comment linking the release and
+saying that extensions.gnome.org still serves 1.3.1. All seven were already
+fixed in 2.0 and already had an explanation from 2026-11-24, so nothing was
+re-explained. The comment on #28 states that no test machine here has a hidpi
+monitor, so its scale fix is unverified on real hardware, and asks the reporter
+to report back. The repository has no open issue now, verified with
+`gh issue list --state open --json number --jq 'length'` returning 0.
 
 ## 2026-11-24: ClipMaster 2.0 prepared, audited and verified
 

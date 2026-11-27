@@ -291,9 +291,23 @@ extensions.gnome.org, so the zip on the GitHub release contains the EGO-A-004
 logging change from section H2 that the submitted package does not. The change
 has no effect on behaviour and is verified on both machines.
 
-Still by hand, carried over from section H: the new page screenshot on
-extensions.gnome.org, the two drafted comments, and closing the issues once 2.0
-is public there.
+Also on 2026-11-28, on Sait's instruction: all seven open issues answered and
+closed as completed. Every one of them was already fixed in 2.0 and already
+carried an explanation from 2026-11-24, so the new comment says only that 2.0
+is on GitHub, links the release, and says the site still serves 1.3.1 until the
+review passes. #17, #20, #23, #25, #26, #27, #28. The repository now has no
+open issue.
+
+The comment on #28 says plainly that neither test machine has a hidpi monitor,
+so the scale fix is untested on real hardware, and asks the reporter to say so
+if the popup is still tiny. Closing an issue whose fix cannot be verified here
+is only honest if the comment says that.
+
+Still by hand on extensions.gnome.org, which nothing in this repository can
+reach: the 2.0 page screenshot, and the reply to the 2 star review in E2. The
+"two drafted comments" named in the Release paragraph above is now ambiguous,
+since the eight GitHub issue comments it may have meant were posted on
+2026-11-24; treat it as the store-side replies until Sait says otherwise.
 
 The process gap worth keeping: a release is not finished when the branch is
 pushed. The branch, the default branch, the tag, the release and the published
