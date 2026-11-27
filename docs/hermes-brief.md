@@ -38,7 +38,9 @@ still gets 1.3.1 until the review passes.
 
 Uploaded and waiting for review: **2.0**, sent by Sait on 2026-11-24. The
 package is `build/clipmaster@gnome.extension.shell-extension.zip`, built by
-`scripts/build.sh` from `release/v2.0`. It is verified on two virtual machines,
+`scripts/build.sh` from commit `060a684`, which is on `main`. The
+`release/v2.0` branch was deleted on 2026-11-28 once `main` carried everything;
+`main` is the only branch now. It is verified on two virtual machines,
 Ubuntu 26.04 with GNOME Shell 50.1 and Fedora 45 with GNOME Shell 51.1, with
 104 unit checks, 27 behaviour checks and 24 interface checks passing on each.
 

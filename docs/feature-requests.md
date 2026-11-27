@@ -304,10 +304,17 @@ if the popup is still tiny. Closing an issue whose fix cannot be verified here
 is only honest if the comment says that.
 
 Still by hand on extensions.gnome.org, which nothing in this repository can
-reach: the 2.0 page screenshot, and the reply to the 2 star review in E2. The
-"two drafted comments" named in the Release paragraph above is now ambiguous,
-since the eight GitHub issue comments it may have meant were posted on
-2026-11-24; treat it as the store-side replies until Sait says otherwise.
+reach: upload `screenshots/clipmaster-v2-store.png` on the extension page,
+because the image there is still from 1.2.1 and does not come from
+`metadata.json`, and post the two comments drafted on 2026-11-24, which are the
+reply to the 2 star review by huesosdebrasa in E2 and a general note on the
+page. The page description does update itself from the `metadata.json` inside
+the zip, so that one needs nothing.
+
+Also on 2026-11-28: the `release/v2.0` branch was deleted, locally and on
+origin, after checking that `origin/main` and `origin/release/v2.0` were the
+same commit `a0bbce5`, that no commit existed only on the branch, and that the
+`v2.0` tag is an ancestor of `main`. `main` is now the only branch.
 
 The process gap worth keeping: a release is not finished when the branch is
 pushed. The branch, the default branch, the tag, the release and the published

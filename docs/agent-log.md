@@ -41,8 +41,14 @@ listed 26 files.
 **What is still open.** The GitHub zip is built from `51899bd` and therefore
 contains the EGO-A-004 logging change (`ec0de9a`) that the package in review at
 extensions.gnome.org, built from `060a684`, does not. No behaviour differs.
-Carried over and still by hand, both on extensions.gnome.org: the 2.0 page
-screenshot, and the reply to the 2 star review tracked as E2.
+Carried over and still by hand, both on extensions.gnome.org: upload the 2.0
+page screenshot, and post the two comments drafted on 2026-11-24, the reply to
+the 2 star review tracked as E2 and a general note on the page.
+
+**Branch deleted.** `release/v2.0` is gone, locally and on origin, after
+checking that both pointed at `a0bbce5`, that no commit lived only on the
+branch, and that the `v2.0` tag is an ancestor of `main`. `main` is the only
+branch now.
 
 **Issues closed.** Sait then asked for the seven open issues to be answered and
 closed, which reverses the earlier "wait until 2.0 is public on the site"
