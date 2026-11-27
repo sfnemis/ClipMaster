@@ -2,6 +2,51 @@
 
 One entry per finished task, newest first. Facts only.
 
+## 2026-11-28: GitHub brought up to 2.0
+
+**What changed.** The repository was still presenting 1.3.1 to anyone who
+visited it, four days after 2.0 was uploaded to extensions.gnome.org. Nothing
+was lost: every commit was on origin, and `release/v2.0` had been there at
+`51899bd` the whole time. What had not happened was everything else a release
+consists of.
+
+- `main` was ten commits behind at `ed30721` and zero ahead, so it was
+  fast-forwarded to `51899bd` and pushed. No merge commit.
+- Annotated tag `v2.0` created on `51899bd` and pushed. The name matches
+  `version-name` in `metadata.json` and the `## 2.0` heading in `CHANGELOG.md`;
+  the older tags are inconsistent (`v1.3` and `v1.3.1` both exist) and Sait
+  chose `v2.0`.
+- GitHub release `v2.0`, titled "ClipMaster 2.0", published as the latest
+  release with the 2.0 section of `CHANGELOG.md` as its notes and
+  `clipmaster@gnome.extension.zip` attached, 71203 bytes, built by
+  `scripts/build.sh` from the tag. Every earlier release carries the same asset
+  name.
+- The repository description still read "with history, encryption, image
+  support", which is the claim 2.0 exists to withdraw. It now reads: "Clipboard
+  history for GNOME Shell. Search, favourites, images, QR codes and a private
+  mode. There is no network code in it, so nothing leaves your machine. GNOME
+  46 to 51, on Wayland and X11." The homepage field, previously empty, now
+  points at the extensions.gnome.org page.
+
+**Where it is live.** https://github.com/sfnemis/ClipMaster, `main` and tag
+`v2.0` at `51899bd`, release at
+https://github.com/sfnemis/ClipMaster/releases/tag/v2.0
+
+**How it was verified.** `git ls-remote` for `main` and the tag, both reporting
+`51899bd...`/`67d722b...`; `gh release view v2.0` reporting `draft: false` and
+the one asset; `gh repo view` reading back the new description and homepage.
+`scripts/build.sh` ran with no "missing" and no "NOT PACKAGED" output and
+listed 26 files.
+
+**What is still open.** The GitHub zip is built from `51899bd` and therefore
+contains the EGO-A-004 logging change (`ec0de9a`) that the package in review at
+extensions.gnome.org, built from `060a684`, does not. No behaviour differs.
+Carried over and still by hand: the 2.0 page screenshot on
+extensions.gnome.org, the two drafted comments, and closing the seven open
+issues once 2.0 is public there. Issues #20, #23, #25 and #27 are fixed by this
+release but stay open by the decision recorded in section I of
+`docs/feature-requests.md`.
+
 ## 2026-11-24: ClipMaster 2.0 prepared, audited and verified
 
 **What changed.** A full audit of the published 1.3.1 against the

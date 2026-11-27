@@ -29,6 +29,13 @@ planned.
 Live on extensions.gnome.org: **1.3.1**, 5723 downloads, 36 stars and 6 forks
 on GitHub.
 
+Live on GitHub: **2.0**. Since 2026-11-28 `main` and the tag `v2.0` both point
+at `51899bd`, and the release at
+https://github.com/sfnemis/ClipMaster/releases/tag/v2.0 carries the installable
+zip. So the two channels disagree on purpose: anyone reading the repository or
+installing from source gets 2.0, anyone installing from extensions.gnome.org
+still gets 1.3.1 until the review passes.
+
 Uploaded and waiting for review: **2.0**, sent by Sait on 2026-11-24. The
 package is `build/clipmaster@gnome.extension.shell-extension.zip`, built by
 `scripts/build.sh` from `release/v2.0`. It is verified on two virtual machines,
@@ -43,13 +50,19 @@ second is already fixed on the branch and deliberately held back for the next
 version, because it changes no behaviour and replacing a package during review
 costs the queue position.
 
-Until that review passes, 1.3.1 is what users get. Describe ClipMaster by what
-1.3.1 does only where the difference matters; everything in the 2.0 section
-below is real, tested and submitted, but not yet public.
+Until that review passes, 1.3.1 is what users installing from the site get,
+while GitHub serves 2.0. Describe ClipMaster by what 1.3.1 does only where the
+difference matters; everything in the 2.0 section below is real, tested and
+published on GitHub, but not yet on extensions.gnome.org.
+
+Never describe ClipMaster as encrypting anything. The GitHub description said
+"encryption" until 2026-11-28 and that was wrong even for 1.3.1: the code is a
+repeating-key XOR with the key stored beside the data. Call it obfuscation.
 
 ## What shipped when
 
-**2.0, uploaded 2026-11-24, in review.** A correctness and honesty
+**2.0, uploaded to extensions.gnome.org 2026-11-24 and still in review,
+released on GitHub 2026-11-28.** A correctness and honesty
 release. The popup did not open at all on GNOME 50 and 51. Any failure reading
 the stored history silently replaced it, which is how users lost their history.
 The excluded applications list had no effect. The preferences window claimed

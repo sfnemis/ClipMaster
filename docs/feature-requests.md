@@ -270,6 +270,36 @@ behaviour, and replacing a package while it is in the queue costs the position.
 The fix ships in the next version. Sait asked twice whether he had to upload
 again; the answer recorded here is no.
 
+### J. The GitHub repository was left on 1.3.1
+
+Reported by Sait on 2026-11-28. Everything was pushed, so nothing was lost:
+`release/v2.0` has been on origin at `51899bd` all along. What was never done is
+the part section H above already listed as pending by hand. `main` still pointed
+at `ed30721`, ten commits behind, so anyone landing on the repository saw 1.3.1;
+there was no `v2.0` tag and no release, the newest being v1.3.1 from
+2026-01-26; and the repository description still advertised "encryption", which
+is the exact claim 2.0 was released to withdraw.
+
+Done on 2026-11-28: `main` fast-forwarded to `release/v2.0` and pushed, tag
+`v2.0` created on `51899bd` and pushed, GitHub release `v2.0` published with
+the CHANGELOG 2.0 text and a zip built by `scripts/build.sh` from the tag, the
+repository description rewritten without the encryption claim, and the
+homepage field pointed at the extensions.gnome.org page.
+
+The tag sits on `51899bd`, not on the `060a684` that was uploaded to
+extensions.gnome.org, so the zip on the GitHub release contains the EGO-A-004
+logging change from section H2 that the submitted package does not. The change
+has no effect on behaviour and is verified on both machines.
+
+Still by hand, carried over from section H: the new page screenshot on
+extensions.gnome.org, the two drafted comments, and closing the issues once 2.0
+is public there.
+
+The process gap worth keeping: a release is not finished when the branch is
+pushed. The branch, the default branch, the tag, the release and the published
+description are five separate states, and four of them stayed on the old
+version while the first one looked done.
+
 ## Verification
 
 Run on the exact source that produces the package.
